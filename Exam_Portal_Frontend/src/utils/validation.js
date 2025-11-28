@@ -1,15 +1,34 @@
 // Input validation utilities for security and data integrity
+// Input validation utilities for security and data integrity
 
 export const validateEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  
+  if (typeof email !== "string" || email.length > 254) return false;
+  const parts = email.split("@");
+  if (parts.length !== 2) return false;
+
+  const [local, domain] = parts;
+  if (local.length === 0 || local.length > 64) return false;
+  if (domain.length === 0 || domain.length > 253) return false;
+  const localRegex = /^[A-Za-z0-9._%+-]+$/;
+  const domainRegex = /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+  return localRegex.test(local) && domainRegex.test(domain);
 };
 
-export const validatePassword = (password) => {
-  // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{8,}$/;
-  return passwordRegex.test(password);
+export const sanitizeHtmlInput = (input) => {
+  if (typeof input !== "string") return input;
+
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .trim();
 };
+
+
 
 export const validateUserId = (userId) => {
   // Allow alphanumeric characters, hyphens, and underscores
@@ -25,13 +44,15 @@ export const validateExamId = (examId) => {
 
 export const sanitizeInput = (input) => {
   if (typeof input !== 'string') return input;
-
-  // Remove potentially dangerous characters
   return input
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<[^>]*>/g, '')
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
     .trim();
 };
+
 
 export const validateFileUpload = (file, allowedTypes = [], maxSize = 10 * 1024 * 1024) => {
   if (!file) return { valid: false, error: 'No file provided' };
