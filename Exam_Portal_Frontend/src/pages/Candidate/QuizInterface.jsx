@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Clock, User, BookOpen, AlertCircle, ChevronLeft, ChevronRight, Video, VideoOff } from "lucide-react";
-import { useNavigate, useParams, useBlocker } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import truerizeLogo from "../../assets/images/Truerize_Logo.png";
-
 
 const sectionMap = [
   { id: "A", name: "Quantitative Aptitude", marks: 1, type: "mcq" },
@@ -13,7 +12,6 @@ const sectionMap = [
 ];
 
 const DEFAULT_TEST_EXAM_ID = "12";
-
 
 const QuizInterface = () => {
   const navigate = useNavigate();
@@ -36,15 +34,11 @@ const QuizInterface = () => {
   const [backButtonCount, setBackButtonCount] = useState(0);
   const MAX_BACK_ATTEMPTS = 1;
 
-  
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedVideoUrl, setRecordedVideoUrl] = useState(null);
+  // ✅ Camera state - NO RECORDING
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const recordedChunksRef = useRef([]);
   const streamRef = useRef(null);
-
 
   const [studentId, setStudentId] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -53,26 +47,22 @@ const QuizInterface = () => {
   const [userName, setUserName] = useState("Loading...");
   const [userEmail, setUserEmail] = useState("");
 
- 
   const getStorageKey = (key) => `exam_${liveExamId}_${studentId}_${key}`;
 
- 
+  // Back button protection
   useEffect(() => {
     if (isSubmitted || showSuccessScreen) return;
 
-    
     const stateObj = { page: 'quiz', timestamp: Date.now() };
     window.history.pushState(stateObj, "", window.location.href);
     
     const handlePopState = (event) => {
-      
       window.history.pushState(stateObj, "", window.location.href);
       
       setBackButtonCount(prev => {
         const newCount = prev + 1;
 
         if (newCount > MAX_BACK_ATTEMPTS) {
-          
           if (!isAutoSubmittingRef.current) {
             alert("⚠️ Second back button attempt detected!\n\n🔴 Your exam will be submitted automatically now.");
             setTimeout(() => {
@@ -80,7 +70,6 @@ const QuizInterface = () => {
             }, 1000);
           }
         } else {
-          
           alert("⚠️ WARNING: Back button detected!\n\n⚡ This is your first warning.\n\n🔴 If you press back again, your exam will be AUTOMATICALLY SUBMITTED.\n\nPlease use the 'Submit Exam' button to exit properly.");
         }
 
@@ -88,7 +77,6 @@ const QuizInterface = () => {
       });
     };
 
-    
     window.addEventListener("popstate", handlePopState);
 
     return () => {
@@ -96,7 +84,7 @@ const QuizInterface = () => {
     };
   }, [isSubmitted, showSuccessScreen, backButtonCount]);
 
-  
+  // Prevent accidental page close
   useEffect(() => {
     if (isSubmitted || showSuccessScreen) return;
 
@@ -113,26 +101,17 @@ const QuizInterface = () => {
     };
   }, [isSubmitted, showSuccessScreen]);
 
-  
+  // Disable navigation shortcuts
   useEffect(() => {
     if (isSubmitted || showSuccessScreen) return;
 
     const handleKeyDown = (e) => {
-      
-      if (e.key === 'Backspace' && 
-          !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+      if (e.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
         e.preventDefault();
         alert("⚠️ Navigation shortcuts are disabled during the exam!");
       }
 
-      
-      if (e.altKey && e.key === 'ArrowLeft') {
-        e.preventDefault();
-        alert("⚠️ Navigation shortcuts are disabled during the exam!");
-      }
-
-      
-      if (e.altKey && e.key === 'ArrowRight') {
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
         alert("⚠️ Navigation shortcuts are disabled during the exam!");
       }
@@ -145,7 +124,7 @@ const QuizInterface = () => {
     };
   }, [isSubmitted, showSuccessScreen]);
 
-  
+  // Load saved data
   const loadSavedData = () => {
     try {
       const savedAnswers = sessionStorage.getItem(getStorageKey('answers'));
@@ -181,7 +160,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Save data to session
   const saveDataToSession = () => {
     try {
       if (studentId && liveExamId) {
@@ -196,7 +175,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Clear exam session
   const clearExamSession = () => {
     try {
       if (studentId && liveExamId) {
@@ -211,19 +190,21 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Save data periodically
   useEffect(() => {
     if (studentId && liveExamId && Object.keys(answers).length > 0) {
       saveDataToSession();
     }
   }, [answers, timeLeft, currentQuestionIndex, tabSwitchCount, backButtonCount]);
 
-
+  // ✅ START CAMERA - NO RECORDING (Just Display)
   const startCamera = async () => {
     try {
+      console.log("🎥 Starting camera for proctoring visibility...");
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
+        video: { width: 640, height: 480 },
+        audio: false // No audio needed since we're not recording
       });
 
       streamRef.current = stream;
@@ -232,56 +213,38 @@ const QuizInterface = () => {
         videoRef.current.srcObject = stream;
       }
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp8,opus'
-      });
-
-      mediaRecorderRef.current = mediaRecorder;
-      recordedChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        if (recordedChunksRef.current.length > 0) {
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
-          setRecordedVideoUrl(url);
-        }
-      };
-
-      mediaRecorder.start(1000);
-      setIsRecording(true);
+      setIsCameraActive(true);
       setCameraError(null);
+      console.log("✅ Camera started (display only - not recording)");
 
     } catch (err) {
       console.error("❌ Camera access error:", err);
       setCameraError("Unable to access camera. Please allow camera permissions.");
       setError("Camera access is required for this exam.");
+      setIsCameraActive(false);
     }
   };
 
-  
+  // ✅ STOP CAMERA - No Recording to Stop
   const stopCamera = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-
+    console.log("🛑 Stopping camera...");
+    
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log("Track stopped:", track.kind);
+      });
     }
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
 
-    setIsRecording(false);
+    setIsCameraActive(false);
+    console.log("✅ Camera stopped");
   };
 
- 
+  // Clear all browser storage
   const clearAllBrowserStorage = () => {
     try {
       localStorage.clear();
@@ -305,7 +268,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Clear user session
   const clearUserSession = async () => {
     try {
       await axios.post(
@@ -320,7 +283,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Auto assign student
   const autoAssignStudent = async (studentId, examId) => {
     setIsAutoAssigning(true);
     setError("🔄 Assigning you to an exam set...");
@@ -356,7 +319,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // ✅ HANDLE SUBMIT EXAM - NO VIDEO UPLOAD
   const handleSubmitExam = async () => {
     if (!examData || isSubmitted || !studentId || isAutoSubmittingRef.current) {
       return;
@@ -366,36 +329,13 @@ const QuizInterface = () => {
     setIsSubmitted(true);
 
     try {
+      console.log("📝 Submitting exam...");
+      
+      // Stop camera
       stopCamera();
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      let videoUrl = null;
-
-      if (recordedChunksRef.current.length > 0) {
-        try {
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          const formData = new FormData();
-          const filename = `exam_${liveExamId}_student_${studentId}.webm`;
-
-          formData.append('video', blob, filename);
-          formData.append('examId', liveExamId);
-          formData.append('studentId', studentId);
-
-          const uploadResponse = await axios.post(
-            'http://localhost:8080/api/candidate/upload-video',
-            formData,
-            {
-              headers: { 'Content-Type': 'multipart/form-data' },
-              withCredentials: true
-            }
-          );
-
-          videoUrl = uploadResponse.data.videoUrl || uploadResponse.data.filePath;
-        } catch (uploadErr) {
-          console.error("❌ Video upload failed:", uploadErr);
-        }
-      }
-
+      // Prepare answers
       const payloadAnswers = {};
       Object.entries(answers).forEach(([questionId, answerContent]) => {
         const question = questions.find(q => q.id === Number(questionId));
@@ -404,12 +344,15 @@ const QuizInterface = () => {
         }
       });
 
+      // ✅ Submit WITHOUT video URL
       const payload = {
         user: { id: Number(studentId) },
         exam: { id: Number(liveExamId) },
         answersJson: JSON.stringify(payloadAnswers),
-        videoUrl: videoUrl
+        videoUrl: null // ✅ No video URL
       };
+
+      console.log("📤 Submitting payload (no video):", payload);
 
       await axios.post(
         "http://localhost:8080/api/candidate/submit-exam",
@@ -417,10 +360,11 @@ const QuizInterface = () => {
         { withCredentials: true }
       );
 
-      
+      console.log("✅ Exam submitted successfully (without video)");
+
+      // Clear exam session
       clearExamSession();
 
-     
       const examFlowKey = `exam_flow_started_${studentId}`;
       const quizAccessKey = `quiz_access_${studentId}`;
       sessionStorage.removeItem(examFlowKey);
@@ -445,7 +389,7 @@ const QuizInterface = () => {
     }
   };
 
-  
+  // Tab switching detection
   useEffect(() => {
     if (isSubmitted || !examData) return;
 
@@ -473,7 +417,7 @@ const QuizInterface = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isSubmitted, examData]);
 
-  
+  // Check authentication
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -513,7 +457,7 @@ const QuizInterface = () => {
     checkAuth();
   }, [navigate]);
 
-  
+  // Fetch exam data
   useEffect(() => {
     if (!authChecked || !studentId) return;
 
@@ -540,7 +484,7 @@ const QuizInterface = () => {
             setAssignedSetNumber(currentSetNumber);
           }
         } catch (assignErr) {
-          
+          // Assignment not found
         }
 
         if (!isAssigned) {
@@ -597,6 +541,8 @@ const QuizInterface = () => {
 
         setLoading(false);
         loadSavedData();
+        
+        // ✅ Start camera (display only)
         startCamera();
 
       } catch (err) {
@@ -614,7 +560,7 @@ const QuizInterface = () => {
     };
   }, [liveExamId, authChecked, studentId, navigate, userName]);
 
-  
+  // Timer countdown
   useEffect(() => {
     if (!examData || isSubmitted || timeLeft <= 0) return;
 
@@ -630,7 +576,6 @@ const QuizInterface = () => {
     return () => clearInterval(timer);
   }, [examData, isSubmitted, timeLeft]);
 
-  
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -727,7 +672,7 @@ const QuizInterface = () => {
     return "unanswered";
   };
 
-  
+  // Success screen
   if (showSuccessScreen) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-6">
@@ -797,24 +742,34 @@ const QuizInterface = () => {
             </div>
           </div>
 
+          {/* ✅ Camera Display (No Recording) */}
           <div className="p-4 border-b border-gray-700">
             <div className="relative bg-black rounded-lg overflow-hidden">
-              <video ref={videoRef} autoPlay muted playsInline className="w-full h-40 object-cover" />
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                muted 
+                playsInline 
+                className="w-full h-40 object-cover" 
+              />
               <div className="absolute top-2 right-2">
-                {isRecording ? (
-                  <div className="flex items-center gap-2 bg-red-600 text-white px-2 py-1 rounded-full text-xs">
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    Recording
+                {isCameraActive ? (
+                  <div className="flex items-center gap-2 bg-green-600 text-white px-2 py-1 rounded-full text-xs">
+                    <Video className="w-3 h-3" />
+                    Camera On
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 bg-gray-600 text-white px-2 py-1 rounded-full text-xs">
+                  <div className="flex items-center gap-2 bg-red-600 text-white px-2 py-1 rounded-full text-xs">
                     <VideoOff className="w-3 h-3" />
-                    Stopped
+                    Camera Off
                   </div>
                 )}
               </div>
             </div>
             {cameraError && <p className="text-red-400 text-xs mt-2">{cameraError}</p>}
+            <p className="text-gray-400 text-xs mt-2 text-center">
+              📹 Proctoring: Display Only
+            </p>
           </div>
 
           <div className="flex-1 p-6 overflow-y-auto sidebar-scroll">
@@ -838,138 +793,135 @@ const QuizInterface = () => {
                           onClick={() => handleQuestionJump(qIndex)}
                           className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${status === "current" ? "bg-blue-600 text-white shadow-lg border-2 border-blue-300"
                               : status === "answered" ? "bg-green-600 text-white"
-                                : "bg-gray-600 text-gray-300 hover:bg-gray-500"
-                            }`}
-                        >
-                          {index + 1}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="p-6 border-t border-gray-700">
-            <button
-              onClick={handleSubmitExam}
-              disabled={isSubmitted}
-              className={`w-full font-medium py-3 px-4 rounded-lg transition-colors shadow-lg ${isSubmitted ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'
-                }`}
-            >
-              {isSubmitted ? 'Submitting...' : 'Submit Exam'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1 flex flex-col">
-        <header className="bg-white shadow-md border-b border-gray-300 p-4 sticky top-0 z-40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <button onClick={() => setShowSidebar(!showSidebar)} className="mr-4 p-2 hover:bg-gray-100 rounded-lg text-gray-700 transition-colors">
-                {showSidebar ? <ChevronLeft className="w-6 h-6" /> : <ChevronRight className="w-6 h-6" />}
-              </button>
-              <span className="text-lg font-medium text-gray-600">
-                Section: <span className="font-semibold text-blue-600">{currentSection?.name}</span> |
-                Question: <span className="font-semibold text-blue-600">{displaySectionQuestionNumber}</span>
-              </span>
-            </div>
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center">
-                <Clock className="w-5 h-5 text-red-500 mr-2" />
-                <span className="font-medium text-gray-600 mr-2">Time Left:</span>
-                <span className={`font-mono text-xl font-bold ${timeLeft < 300 ? "text-red-500 animate-pulse" : "text-gray-800"}`}>
-                  {formatTime(timeLeft)}
-                </span>
-              </div>
-              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                Question {displaySectionQuestionNumber} of {sectionQuestions.length}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 p-8 bg-gray-50 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-              <div className="mb-8">
-                <div className="flex items-start justify-between mb-4">
-                  <p className="text-lg font-semibold text-gray-800 flex-1">
-                    Q{displaySectionQuestionNumber}. {currentQ.questionText}
-                  </p>
-                  <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold ml-4">
-                    {currentQ.marks} {currentQ.marks > 1 ? 'Marks' : 'Mark'}
-                  </span>
-                </div>
-              </div>
-
-              {currentQ.type === "mcq" && currentQ.options && currentQ.options.length > 0 && (
-                <div className="space-y-3 mb-8">
-                  {currentQ.options.map((option, index) => {
-                    const optionValue = String.fromCharCode(65 + index);
-                    const isSelected = answers[currentQ.id] === optionValue;
-                    return (
-                      <label
-                        key={index}
-                        className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${isSelected
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-                          }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`question-${currentQ.id}`}
-                          value={optionValue}
-                          checked={isSelected}
-                          onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                          className="w-5 h-5 text-blue-600 mr-3"
-                        />
-                        <span className="font-semibold mr-3 text-gray-700">{optionValue}.</span>
-                        <span className="text-gray-800 select-none">{option}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between pt-6 border-t border-gray-300 mt-8">
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handlePrevious}
-                    disabled={currentQuestionIndex === 0}
-                    className={`px-6 py-2 border border-gray-400 text-gray-700 rounded-lg transition-colors ${currentQuestionIndex === 0
-                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                      : "bg-gray-200 hover:bg-gray-300 text-gray-800"
-                      }`}
-                  >
-                    Previous
-                  </button>
-
-                  <button
-                    onClick={clearResponse}
-                    className="px-6 py-2 bg-gray-100 border border-gray-400 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Clear Response
-                  </button>
-                </div>
-
-                {!isLastQuestionOverall && (
-                  <button
-                    onClick={handleNext}
-                    className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-                  >
-                    Next
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </main>
+                                : "bg-gray-600 text-gray-300 hover:bg-gray-500"}`}
+>
+{index + 1}
+</button>
+);
+})}
+</div>
+</div>
+);
+})}
+</div>
+<div className="p-6 border-t border-gray-700">
+        <button
+          onClick={handleSubmitExam}
+          disabled={isSubmitted}
+          className={`w-full font-medium py-3 px-4 rounded-lg transition-colors shadow-lg ${isSubmitted ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'
+            }`}
+        >
+          {isSubmitted ? 'Submitting...' : 'Submit Exam'}
+        </button>
       </div>
     </div>
-  );
-};
+  )}
 
+  <div className="flex-1 flex flex-col">
+    <header className="bg-white shadow-md border-b border-gray-300 p-4 sticky top-0 z-40">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <button onClick={() => setShowSidebar(!showSidebar)} className="mr-4 p-2 hover:bg-gray-100 rounded-lg text-gray-700 transition-colors">
+            {showSidebar ? <ChevronLeft className="w-6 h-6" /> : <ChevronRight className="w-6 h-6" />}
+          </button>
+          <span className="text-lg font-medium text-gray-600">
+            Section: <span className="font-semibold text-blue-600">{currentSection?.name}</span> |
+            Question: <span className="font-semibold text-blue-600">{displaySectionQuestionNumber}</span>
+          </span>
+        </div>
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center">
+            <Clock className="w-5 h-5 text-red-500 mr-2" />
+            <span className="font-medium text-gray-600 mr-2">Time Left:</span>
+            <span className={`font-mono text-xl font-bold ${timeLeft < 300 ? "text-red-500 animate-pulse" : "text-gray-800"}`}>
+              {formatTime(timeLeft)}
+            </span>
+          </div>
+          <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+            Question {displaySectionQuestionNumber} of {sectionQuestions.length}
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main className="flex-1 p-8 bg-gray-50 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
+          <div className="mb-8">
+            <div className="flex items-start justify-between mb-4">
+              <p className="text-lg font-semibold text-gray-800 flex-1">
+                Q{displaySectionQuestionNumber}. {currentQ.questionText}
+              </p>
+              <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold ml-4">
+                {currentQ.marks} {currentQ.marks > 1 ? 'Marks' : 'Mark'}
+              </span>
+            </div>
+          </div>
+
+          {currentQ.type === "mcq" && currentQ.options && currentQ.options.length > 0 && (
+            <div className="space-y-3 mb-8">
+              {currentQ.options.map((option, index) => {
+                const optionValue = String.fromCharCode(65 + index);
+                const isSelected = answers[currentQ.id] === optionValue;
+                return (
+                  <label
+                    key={index}
+                    className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${isSelected
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                      }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`question-${currentQ.id}`}
+                      value={optionValue}
+                      checked={isSelected}
+                      onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                      className="w-5 h-5 text-blue-600 mr-3"
+                    />
+                    <span className="font-semibold mr-3 text-gray-700">{optionValue}.</span>
+                    <span className="text-gray-800 select-none">{option}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-6 border-t border-gray-300 mt-8">
+            <div className="flex space-x-3">
+              <button
+                onClick={handlePrevious}
+                disabled={currentQuestionIndex === 0}
+                className={`px-6 py-2 border border-gray-400 text-gray-700 rounded-lg transition-colors ${currentQuestionIndex === 0
+                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                  }`}
+              >
+                Previous
+              </button>
+
+              <button
+                onClick={clearResponse}
+                className="px-6 py-2 bg-gray-100 border border-gray-400 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Clear Response
+              </button>
+            </div>
+
+            {!isLastQuestionOverall && (
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                Next
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+);
+};
 export default QuizInterface;

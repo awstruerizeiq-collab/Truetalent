@@ -1,0 +1,20 @@
+User-agent: *
+Disallow: /
+
+# Allow access to public pages only
+Allow: /
+Allow: /terms
+Allow: /privacy
+Allow: /help
+
+# Disallow admin and candidate routes
+Disallow: /dashboard
+Disallow: /users
+Disallow: /exams
+Disallow: /questions
+Disallow: /results
+Disallow: /candidate
+Disallow: /camera
+Disallow: /quiz
+Disallow: /submit
+Disallow: /run
