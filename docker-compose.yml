@@ -1,10 +1,12 @@
+version: "3.8"
+
 services:
   mysql:
     image: mysql:8.0
     container_name: exam-mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: Nesan@123
       MYSQL_DATABASE: exam_portal
     ports:
       - "3307:3306"
@@ -21,7 +23,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/exam_portal
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: rootpassword
+      SPRING_DATASOURCE_PASSWORD: Nesan@123
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
     ports:
       - "8080:8080"
@@ -33,10 +35,11 @@ services:
     restart: always
     depends_on:
       - backend
-    environment:
-      REACT_APP_API_BASE_URL: http://localhost:8080/api
     ports:
       - "3000:80"
+    environment:
+      # Not used at runtime but for clarity
+      REACT_APP_API_BASE_URL: http://backend:8080/api
 
 volumes:
   mysql_data:

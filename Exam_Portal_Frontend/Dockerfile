@@ -15,7 +15,11 @@ RUN npm run build
 # Stage 2: serve with Nginx
 FROM nginx:alpine
 
+# Copy build output
 COPY --from=build /app/build /usr/share/nginx/html
+
+# 🔴 Add this line to override default nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
