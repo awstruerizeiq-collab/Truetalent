@@ -100,7 +100,7 @@ Desktop.ini
 # Application specific
 # Video recordings (should not be committed)
 *.webm
-*.mp4
+
 *.avi
 
 # Session data (should not be committed)
