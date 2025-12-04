@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Clock, User, BookOpen, AlertCircle, ChevronLeft, ChevronRight, Video, VideoOff } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 import truerizeLogo from "../../assets/images/Truerize_Logo.png";
 
 const sectionMap = [
@@ -272,7 +272,7 @@ const QuizInterface = () => {
   const clearUserSession = async () => {
     try {
       await axios.post(
-        'http://localhost:8080/api/auth/logout',
+        '/auth/logout',
         {},
         { withCredentials: true }
       );
@@ -290,7 +290,7 @@ const QuizInterface = () => {
 
     try {
       const response = await axios.post(
-        'http://localhost:8080/api/examset/auto-assign',
+        '/examset/auto-assign',
         {
           userId: String(studentId),
           examId: Number(examId)
@@ -355,7 +355,7 @@ const QuizInterface = () => {
       console.log("📤 Submitting payload (no video):", payload);
 
       await axios.post(
-        "http://localhost:8080/api/candidate/submit-exam",
+        "/candidate/submit-exam",
         payload,
         { withCredentials: true }
       );
@@ -421,7 +421,7 @@ const QuizInterface = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await axios.get("http://localhost:8080/api/auth/current-user", {
+        const res = await axios.get("/auth/current-user", {
           withCredentials: true
         });
 
@@ -430,7 +430,7 @@ const QuizInterface = () => {
 
           try {
             const userRes = await axios.get(
-              `http://localhost:8080/api/admin/users/${res.data.userId}`,
+              `/admin/users/${res.data.userId}`,
               { withCredentials: true }
             );
 
@@ -471,7 +471,7 @@ const QuizInterface = () => {
 
         try {
           const assignmentRes = await axios.get(
-            `http://localhost:8080/api/examset/assignment`,
+            `/examset/assignment`,
             {
               params: { userId: studentId, examId: liveExamId },
               withCredentials: true
@@ -498,7 +498,7 @@ const QuizInterface = () => {
           }
 
           const newAssignmentRes = await axios.get(
-            `http://localhost:8080/api/examset/assignment`,
+            `/examset/assignment`,
             {
               params: { userId: studentId, examId: liveExamId },
               withCredentials: true
@@ -512,7 +512,7 @@ const QuizInterface = () => {
         }
 
         const res = await axios.get(
-          `http://localhost:8080/api/candidate/exams/${liveExamId}/shuffled-questions`,
+          `/candidate/exams/${liveExamId}/shuffled-questions`,
           { withCredentials: true }
         );
 

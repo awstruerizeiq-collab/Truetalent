@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 import Sidebar from "../../components/Sidebar";
 
 export default function ManageExams() {
@@ -11,12 +11,12 @@ export default function ManageExams() {
   const [examToDelete, setExamToDelete] = useState(null);
   const [notification, setNotification] = useState({ message: "", type: "" });
 
-  const API_URL = "http://localhost:8080/api/admin/exams";
+  const API_URL = "/admin/exams";
 
  
   const fetchExams = async () => {
     try {
-      const res = await axios.get(API_URL);
+      const res = await axios.get(API_URL, { withCredentials: true });
       setExams(res.data);
     } catch (error) {
       console.error("Error fetching exams:", error);
@@ -74,10 +74,10 @@ export default function ManageExams() {
     const payload = { title: formData.title, duration: Number(formData.duration) };
     try {
       if (editingExam) {
-        await axios.put(`${API_URL}/${editingExam.id}`, payload);
+        await axios.put(`${API_URL}/${editingExam.id}`, payload, { withCredentials: true });
         setNotification({ message: "Exam updated successfully!", type: "success" });
       } else {
-        await axios.post(API_URL, payload);
+        await axios.post(API_URL, payload, { withCredentials: true });
         setNotification({ message: "Exam added successfully!", type: "success" });
       }
       fetchExams();
@@ -91,7 +91,7 @@ export default function ManageExams() {
  
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/${examToDelete.id}`);
+      await axios.delete(`${API_URL}/${examToDelete.id}`, { withCredentials: true });
       fetchExams();
       handleCloseDeleteModal();
       setNotification({ message: "Exam deleted successfully!", type: "success" });

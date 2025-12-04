@@ -1,31 +1,37 @@
 import axios from "axios";
 import logger from "../utils/logger";
 
+// IMPORTANT:
+// ALWAYS prefer /api so that requests pass through nginx proxy.
+// DO NOT assign "http://localhost:8080/api" anywhere in frontend.
+
 const axiosInstance = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:8080/api",
+  baseURL: process.env.REACT_APP_API_BASE_URL || "/api",
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   timeout: 10000,
 });
 
-
 axiosInstance.interceptors.request.use(
   (config) => {
-    logger.info(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    logger.info(
+      `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`
+    );
     return config;
   },
   (error) => {
-    logger.error('API Request Error', error);
+    logger.error("API Request Error", error);
     return Promise.reject(error);
   }
 );
 
-
 axiosInstance.interceptors.response.use(
   (response) => {
-    logger.info(`API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    logger.info(
+      `API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.baseURL}${response.config.url}`
+    );
     return response;
   },
   (error) => {

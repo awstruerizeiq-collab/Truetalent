@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 import { v4 as uuidv4 } from "uuid";
 import { AlertCircle, CheckCircle, Shuffle, Eye, Trash2, RefreshCw } from "lucide-react";
 
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = "/api";
 
 
 const sections = [
@@ -72,7 +72,7 @@ export default function QuestionBank() {
   
   const fetchExams = async () => {
     try { 
-      const res = await axios.get(`${API_BASE}/admin/exams`, { headers }); 
+      const res = await axios.get(`/admin/exams`, { headers, withCredentials: true }); 
       setExams(res.data); 
     } 
     catch (err) {
@@ -84,7 +84,7 @@ export default function QuestionBank() {
   const fetchQuestions = async () => {
     if (!selectedExam) return;
     try { 
-      const res = await axios.get(`${API_BASE}/admin/exams/${selectedExam}/questions`, { headers });
+      const res = await axios.get(`/admin/exams/${selectedExam}/questions`, { headers, withCredentials: true });
       setQuestions(res.data); 
     } 
     catch (err) { 
@@ -114,7 +114,8 @@ export default function QuestionBank() {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -151,7 +152,8 @@ export default function QuestionBank() {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
       
       const data = await response.json();
@@ -193,7 +195,8 @@ export default function QuestionBank() {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -232,7 +235,8 @@ export default function QuestionBank() {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -329,17 +333,17 @@ export default function QuestionBank() {
 
       if (editingQuestion) {
         await axios.put(
-          `${API_BASE}/admin/exams/${formData.examId}/questions/${editingQuestion.id}`, 
+          `/admin/exams/${formData.examId}/questions/${editingQuestion.id}`, 
           payload, 
-          { headers }
+          { headers, withCredentials: true }
         );
         setNotification({ message: "Question updated successfully!", type: "success" });
       } 
       else {
         await axios.post(
-          `${API_BASE}/admin/exams/${formData.examId}/questions`,
+          `/admin/exams/${formData.examId}/questions`,
           payload, 
-          { headers }
+          { headers, withCredentials: true }
         );
         setNotification({ message: "Question added successfully!", type: "success" });
       }
@@ -358,8 +362,8 @@ export default function QuestionBank() {
 
     try {
       await axios.delete(
-        `${API_BASE}/admin/exams/${examId}/questions/${questionId}`,
-        { headers }
+        `/admin/exams/${examId}/questions/${questionId}`,
+        { headers, withCredentials: true }
       );
       setNotification({ message: "Question deleted successfully.", type: "success" });
       fetchQuestions();

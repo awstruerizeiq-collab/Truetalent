@@ -25,7 +25,13 @@ import com.truerize.service.UserService;
 
 @RestController
 @RequestMapping("/api/admin/users")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
+@CrossOrigin(
+        origins = {
+                "http://localhost",
+                "http://localhost:3000",
+                "https://localhost"
+        },
+        allowCredentials = "true")
 public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 import truerizeLogo from "../../assets/images/Truerize_Logo.png";
 
 function CandidateNavbar() {
@@ -77,7 +77,7 @@ function CandidateExamPortal() {
   useEffect(() => {
     const getUser = async () => {
       try {
-        const res = await axios.get("http://localhost:8080/api/auth/current-user", {
+        const res = await axios.get("/auth/current-user", {
           withCredentials: true
         });
         if (res.data && res.data.userId) {
@@ -95,10 +95,10 @@ function CandidateExamPortal() {
   useEffect(() => {
     const fetchExam = async () => {
       try {
-        const examRes = await axios.get("http://localhost:8080/api/admin/exams/12");
+        const examRes = await axios.get("/admin/exams/12");
         const examData = examRes.data;
         
-        const questionsRes = await axios.get("http://localhost:8080/api/admin/exams/12/questions");
+        const questionsRes = await axios.get("/admin/exams/12/questions");
         const questions = questionsRes.data;
         
         setExam(examData);

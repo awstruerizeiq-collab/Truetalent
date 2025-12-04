@@ -1,3 +1,5 @@
+
+
 version: "3.8"
 
 services:
@@ -12,6 +14,8 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - exam-network
 
   backend:
     build:
@@ -27,6 +31,8 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
     ports:
       - "8080:8080"
+    networks:
+      - exam-network
 
   frontend:
     build:
@@ -35,11 +41,32 @@ services:
     restart: always
     depends_on:
       - backend
-    ports:
-      - "3000:80"
+    # ports:
+    #   - "3000:80"
     environment:
-      # Not used at runtime but for clarity
-      REACT_APP_API_BASE_URL: http://backend:8080/api
+      REACT_APP_API_BASE_URL: /api
+    networks:
+      - exam-network
+
+  nginx:
+    image: nginx:latest
+    container_name: exam-nginx
+    restart: always
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - exam-network
 
 volumes:
   mysql_data:
+
+networks:
+  exam-network:
+    driver: bridge

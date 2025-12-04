@@ -16,7 +16,7 @@ public class MailService {
     @Autowired
     private JavaMailSender mailSender;
     
-    private static final String FROM_EMAIL = "bindumsbindu5@gmail.com";
+    private static final String FROM_EMAIL = "talent@truerize.com";
 
     @Async
     public void sendExamAssignedEmail(String to, String password, String examLink) {
@@ -90,7 +90,7 @@ public class MailService {
             				
             				"HR Manager\n" +
             				"Truerize\n" +
-            				"hr@truerize.com / +91-9876543210"
+            				"hr@truerize.com / +91-08041708341"
 
             );
             
@@ -128,7 +128,7 @@ public class MailService {
            
             "HR Manager\n" +
             "Truerize\n" +
-            "hr@truerize.com / +91-9876543210"
+            "hr@truerize.com / +91-08041708341"
             );
 
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -20,10 +20,10 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get("http://localhost:8080/api/admin/dashboard/stats");
+      const res = await axios.get("/admin/dashboard/stats", { withCredentials: true });
       setStats(res.data);
 
-      const usersRes = await axios.get("http://localhost:8080/api/admin/users");
+      const usersRes = await axios.get("/admin/users", { withCredentials: true });
       setLatestUsers(usersRes.data.slice(-5).reverse());
     } catch (err) {
       console.error("Error fetching dashboard data:", err);

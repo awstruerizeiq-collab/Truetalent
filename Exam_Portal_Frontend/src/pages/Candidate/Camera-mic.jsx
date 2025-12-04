@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 
 function ExamStart() {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ function ExamStart() {
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
-        const res = await axios.get("http://localhost:8080/api/auth/current-user", {
+        const res = await axios.get("/auth/current-user", {
           withCredentials: true
         });
         if (res.data && res.data.userId) {
@@ -218,9 +218,10 @@ function ExamStart() {
       formData.append("userId", userId.toString());
       formData.append("examId", examId.toString());
 
-      const response = await fetch("http://localhost:8080/api/proctoring/save", {
+      const response = await fetch("/api/proctoring/save", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       if (!response.ok) {

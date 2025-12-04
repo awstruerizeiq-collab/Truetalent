@@ -1,7 +1,7 @@
 
 import React, { useState } from "react";
 import Editor from "@monaco-editor/react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 
 
 const DEFAULT_JAVA_CODE = `import java.util.Scanner;
@@ -47,7 +47,7 @@ const Run = () => {
 
         setStatus("Running...");
         try {
-            const res = await axios.post("http://localhost:8080/api/code/run", {
+            const res = await axios.post("/code/run", {
                 source: code,
                 language: language.toLowerCase(), 
                 testCases,

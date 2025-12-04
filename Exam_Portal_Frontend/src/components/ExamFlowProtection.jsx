@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../api/axiosConfig';
 
 const ExamFlowProtection = ({ children, requiresExamSession = false }) => {
   const [loading, setLoading] = useState(true);
@@ -15,7 +15,7 @@ const ExamFlowProtection = ({ children, requiresExamSession = false }) => {
   const checkExamFlow = async () => {
     try {
       
-      const authRes = await axios.get("http://localhost:8080/api/auth/current-user", {
+      const authRes = await axios.get("/auth/current-user", {
         withCredentials: true
       });
 

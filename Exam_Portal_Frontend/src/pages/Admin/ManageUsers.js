@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 
 
 const TOTAL_SLOTS = 10;
@@ -60,7 +60,7 @@ export default function ManageUsers() {
   
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/admin/users');
+      const res = await axios.get('/admin/users', { withCredentials: true });
       setAllUsers(res.data);
       setSelectedUsers([]);
       setCurrentPage(1);
@@ -72,7 +72,7 @@ export default function ManageUsers() {
 
   const fetchExams = async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/admin/exams');
+      const res = await axios.get('/admin/exams', { withCredentials: true });
       setExams(res.data);
     } catch (err) { 
       console.error(err);
@@ -121,7 +121,7 @@ export default function ManageUsers() {
 
     try {
       if (editingUser) {
-        await axios.put(`http://localhost:8080/api/admin/users/${editingUser.id}`, formData);
+        await axios.put(`/admin/users/${editingUser.id}`, formData, { withCredentials: true });
         setNotification({ message: 'User updated successfully!', type:'success' });
       } else {
         
@@ -129,7 +129,7 @@ export default function ManageUsers() {
           ...formData,
           slotNumber: SLOT_NAMES.indexOf(currentSlot) + 1
         };
-        await axios.post(`http://localhost:8080/api/auth/addCandidate`, payload);
+        await axios.post(`/auth/addCandidate`, payload, { withCredentials: true });
         setNotification({ message: 'User added successfully!', type:'success' });
       }
       fetchUsers();
@@ -167,7 +167,7 @@ export default function ManageUsers() {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`http://localhost:8080/api/admin/users/${userToDelete.id}`);
+      await axios.delete(`/admin/users/${userToDelete.id}`, { withCredentials: true });
       setNotification({ message: `User ${userToDelete.name} deleted.`, type:'success' });
       fetchUsers();
       closeDeleteModal();
@@ -184,7 +184,7 @@ export default function ManageUsers() {
         examId: Number(examId),
         userIds: selectedUsers.map(id => Number(id))
       };
-      await axios.post(`http://localhost:8080/api/admin/users/assign-exam`, payload);
+      await axios.post(`/admin/users/assign-exam`, payload, { withCredentials: true });
       setNotification({ message: `Exam assigned to ${selectedUsers.length} user(s).`, type:'success' });
       setSelectedUsers([]);
       fetchUsers();
@@ -202,7 +202,7 @@ export default function ManageUsers() {
     }
     
     try {
-      await Promise.all(selectedUsers.map(id => axios.delete(`http://localhost:8080/api/admin/users/${id}`)));
+      await Promise.all(selectedUsers.map(id => axios.delete(`/admin/users/${id}`, { withCredentials: true })));
       setNotification({ message: `${selectedUsers.length} user(s) deleted.`, type:'success' });
       setSelectedUsers([]);
       fetchUsers();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 
 const Notification = ({ message, type, onClose }) => {
   useEffect(() => {
@@ -188,7 +188,9 @@ export default function Results() {
 
   const fetchResults = async () => {
     try {
-      const res = await axios.get("http://localhost:8080/api/admin/results/all");
+      const res = await axios.get("/admin/results/all", {
+        withCredentials: true,
+      });
       setResults(res.data);
     } catch (err) {
       console.error("Error fetching results:", err);
@@ -265,7 +267,7 @@ export default function Results() {
     if (!window.confirm('Are you sure you want to delete this result?')) return;
     
     try {
-      await axios.delete(`http://localhost:8080/api/admin/results/${id}`);
+      await axios.delete(`/admin/results/${id}`, { withCredentials: true });
       setNotification({ message: 'Result deleted successfully!', type: 'success' });
       fetchResults();
     } catch (err) {
@@ -279,7 +281,11 @@ export default function Results() {
 
   const handleReleaseResult = async (id) => {
     try {
-      const response = await axios.put(`http://localhost:8080/api/admin/results/${id}/release`);
+      const response = await axios.put(
+        `/admin/results/${id}/release`,
+        {},
+        { withCredentials: true }
+      );
       fetchResults();
       
      
@@ -307,7 +313,11 @@ export default function Results() {
     try {
       const results = await Promise.allSettled(
         selectedResults.map((id) =>
-          axios.put(`http://localhost:8080/api/admin/results/${id}/release`)
+          axios.put(
+            `/admin/results/${id}/release`,
+            {},
+            { withCredentials: true }
+          )
         )
       );
       
@@ -331,7 +341,11 @@ export default function Results() {
 
   const handleAutoMailSend = async () => {
     try {
-      const response = await axios.put("http://localhost:8080/api/admin/results/send-mails");
+      const response = await axios.put(
+        "/admin/results/send-mails",
+        {},
+        { withCredentials: true }
+      );
       
      
       const message = response.data;
@@ -361,7 +375,7 @@ export default function Results() {
     try {
       await Promise.all(
         updatedData.map((r) =>
-          axios.put(`http://localhost:8080/api/admin/results/${r.id}`, r)
+          axios.put(`/admin/results/${r.id}`, r, { withCredentials: true })
         )
       );
       fetchResults();
@@ -382,7 +396,7 @@ export default function Results() {
     try {
       const results = await Promise.allSettled(
         selectedResults.map((id) =>
-          axios.delete(`http://localhost:8080/api/admin/results/${id}`)
+          axios.delete(`/admin/results/${id}`, { withCredentials: true })
         )
       );
       

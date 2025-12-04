@@ -28,7 +28,13 @@ import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
+@CrossOrigin(
+        origins = {
+                "http://localhost",
+                "http://localhost:3000",
+                "https://localhost"
+        },
+        allowCredentials = "true")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truerize.entity.Exam;
@@ -19,6 +20,13 @@ import com.truerize.service.ExamService;
 
 @RestController
 @RequestMapping("/api/admin/exams")
+@CrossOrigin(
+        origins = {
+                "http://localhost",
+                "http://localhost:3000",
+                "https://localhost"
+        },
+        allowCredentials = "true")
 
 public class ExamController {
 
