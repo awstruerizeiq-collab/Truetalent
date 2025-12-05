@@ -236,8 +236,8 @@ public class UserService {
                 log.info("✅ Assigned user {} to exam {} with set {}", userId, examId, setNumber);
                 
               
-                try {
-                    String examLink = "http://localhost:3000/exam/" + examId;
+               try{
+                    String examLink = "https://app.truerizetalent.com/exam/" + examId;
                     mailService.sendExamAssignedEmail(
                         user.getEmail(), 
                         user.getPassword(), 
