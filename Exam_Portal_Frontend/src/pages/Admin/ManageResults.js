@@ -169,13 +169,128 @@ const EditModal = ({ selectedData, onClose, onSave }) => {
   );
 };
 
+// 🔥 Slot-wise view component
+const SlotWiseView = ({ slotsData, onViewSlot, loading }) => {
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p className="mt-4 text-gray-600">Loading slot-wise data...</p>
+      </div>
+    );
+  }
+
+  if (!slotsData || slotsData.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 max-w-md mx-auto">
+          <svg className="w-16 h-16 text-yellow-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="text-lg font-semibold text-gray-800 mb-2">No Slots Available</p>
+          <p className="text-sm text-gray-600">Create slots in the Slots management section to see slot-wise results</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {slotsData.map((slotData) => (
+        <div
+          key={slotData.slotId}
+          className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow"
+        >
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="text-2xl font-bold text-blue-600">
+                Slot {slotData.slotNumber}
+              </h3>
+              {slotData.collegeName && (
+                <p className="text-sm text-gray-600 mt-1">{slotData.collegeName}</p>
+              )}
+            </div>
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+              slotData.totalCandidates > 0 
+                ? 'bg-blue-100 text-blue-800' 
+                : 'bg-gray-100 text-gray-600'
+            }`}>
+              {slotData.totalCandidates} Candidate{slotData.totalCandidates !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Date:</span>
+              <span className="font-semibold">{slotData.date}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Time:</span>
+              <span className="font-semibold">{slotData.time}</span>
+            </div>
+          </div>
+
+          {slotData.totalCandidates > 0 ? (
+            <>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Average Score:</span>
+                  <span className="font-bold text-blue-700">{slotData.averageScore}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Max Score:</span>
+                  <span className="font-bold text-green-700">{slotData.maxScore}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Min Score:</span>
+                  <span className="font-bold text-orange-700">{slotData.minScore}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Pass Rate:</span>
+                  <span className="font-bold text-purple-700">{slotData.passPercentage}%</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-green-700">{slotData.passedCount}</p>
+                  <p className="text-xs text-gray-600">Passed</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-red-700">{slotData.failedCount}</p>
+                  <p className="text-xs text-gray-600">Failed</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onViewSlot(slotData.slotNumber)}
+                className="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                View Results
+              </button>
+            </>
+          ) : (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg text-center">
+              <p className="text-sm text-gray-500">No candidates in this slot yet</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export default function Results() {
   const [results, setResults] = useState([]);
+  const [slotsData, setSlotsData] = useState([]);
+  const [statistics, setStatistics] = useState(null);
+  const [viewMode, setViewMode] = useState("all"); // "all", "slots", "filtered"
+  const [selectedSlotNumber, setSelectedSlotNumber] = useState(null);
   const [notification, setNotification] = useState({ message: "", type: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [examFilter, setExamFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [slotFilter, setSlotFilter] = useState("All");
   const [sortConfig, setSortConfig] = useState({
     key: "id",
     direction: "ascending",
@@ -185,24 +300,90 @@ export default function Results() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedResultDetails, setSelectedResultDetails] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [slotLoading, setSlotLoading] = useState(false);
 
-  const fetchResults = async () => {
+  const fetchResults = async (slotNumber = null) => {
     try {
-      const res = await axios.get("/admin/results/all", {
+      setLoading(true);
+      console.log("📊 Fetching results...", slotNumber ? `for slot ${slotNumber}` : "all");
+      
+      const url = slotNumber 
+        ? `/admin/results/all?slotNumber=${slotNumber}`
+        : "/admin/results/all";
+      
+      const res = await axios.get(url, {
         withCredentials: true,
       });
-      setResults(res.data);
+      
+      console.log("✅ Results fetched:", res.data);
+      setResults(res.data || []);
+      
+      if (slotNumber) {
+        setViewMode("filtered");
+        setSelectedSlotNumber(slotNumber);
+      }
     } catch (err) {
-      console.error("Error fetching results:", err);
+      console.error("❌ Error fetching results:", err);
       setNotification({ 
-        message: "Failed to fetch results: " + (err.response?.data || err.message), 
+        message: "Failed to fetch results: " + (err.response?.data?.error || err.message), 
         type: "error" 
       });
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSlotWiseData = async () => {
+    try {
+      setSlotLoading(true);
+      console.log("🎯 Fetching slot-wise data...");
+      
+      const res = await axios.get("/admin/results/by-slots", {
+        withCredentials: true,
+      });
+      
+      console.log("✅ Slot-wise data received:", res.data);
+      
+      if (res.data && res.data.slots) {
+        setSlotsData(res.data.slots);
+        console.log(`📊 Total slots: ${res.data.slots.length}`);
+      } else {
+        setSlotsData([]);
+        console.warn("⚠️ No slot data in response");
+      }
+    } catch (err) {
+      console.error("❌ Error fetching slot-wise data:", err);
+      setNotification({ 
+        message: "Failed to fetch slot-wise data: " + (err.response?.data?.error || err.message), 
+        type: "error" 
+      });
+      setSlotsData([]);
+    } finally {
+      setSlotLoading(false);
+    }
+  };
+
+  const fetchStatistics = async () => {
+    try {
+      console.log("📈 Fetching statistics...");
+      const res = await axios.get("/admin/results/statistics", {
+        withCredentials: true,
+      });
+      console.log("✅ Statistics received:", res.data);
+      setStatistics(res.data);
+    } catch (err) {
+      console.error("❌ Error fetching statistics:", err);
+      setStatistics(null);
     }
   };
 
   useEffect(() => {
+    console.log("🚀 Component mounted, fetching initial data...");
     fetchResults();
+    fetchSlotWiseData();
+    fetchStatistics();
   }, []);
   
   useEffect(() => {
@@ -224,28 +405,47 @@ export default function Results() {
           result.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           result.collegeName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
         (examFilter === "All" || result.exam === examFilter) &&
-        (statusFilter === "All" || result.status === statusFilter)
+        (statusFilter === "All" || result.status === statusFilter) &&
+        (slotFilter === "All" || (result.slot && result.slot.slotNumber === parseInt(slotFilter)))
     );
+    
     if (sortConfig.key) {
       processedResults.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key])
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        // Handle slot sorting
+        if (sortConfig.key === "slot") {
+          aVal = a.slot?.slotNumber || 0;
+          bVal = b.slot?.slotNumber || 0;
+        }
+        
+        if (aVal < bVal)
           return sortConfig.direction === "ascending" ? -1 : 1;
-        if (a[sortConfig.key] > b[sortConfig.key])
+        if (aVal > bVal)
           return sortConfig.direction === "ascending" ? 1 : -1;
         return 0;
       });
     }
     return processedResults;
-  }, [results, searchTerm, examFilter, statusFilter, sortConfig]);
+  }, [results, searchTerm, examFilter, statusFilter, slotFilter, sortConfig]);
 
-  const totalPages = Math.ceil(sortedAndFilteredResults.length / 5);
+  const totalPages = Math.ceil(sortedAndFilteredResults.length / 10);
   const paginatedResults = useMemo(() => {
-    const start = (currentPage - 1) * 5;
-    return sortedAndFilteredResults.slice(start, start + 5);
+    const start = (currentPage - 1) * 10;
+    return sortedAndFilteredResults.slice(start, start + 10);
   }, [currentPage, sortedAndFilteredResults]);
 
   const examOptions = useMemo(
-    () => ["All", ...new Set(results.map((r) => r.exam))],
+    () => ["All", ...new Set(results.map((r) => r.exam).filter(Boolean))],
+    [results]
+  );
+
+  const slotOptions = useMemo(
+    () => {
+      const slots = new Set(results.map((r) => r.slot?.slotNumber).filter(Boolean));
+      return ["All", ...Array.from(slots).sort((a, b) => a - b)];
+    },
     [results]
   );
 
@@ -269,7 +469,9 @@ export default function Results() {
     try {
       await axios.delete(`/admin/results/${id}`, { withCredentials: true });
       setNotification({ message: 'Result deleted successfully!', type: 'success' });
-      fetchResults();
+      await fetchResults(selectedSlotNumber);
+      await fetchSlotWiseData();
+      await fetchStatistics();
     } catch (err) {
       console.error('Error deleting result:', err);
       setNotification({ 
@@ -286,12 +488,11 @@ export default function Results() {
         {},
         { withCredentials: true }
       );
-      fetchResults();
+      await fetchResults(selectedSlotNumber);
+      await fetchStatistics();
       
-     
       const message = response.data;
       
-     
       if (typeof message === 'string' && 
           (message.includes("email sending failed") || 
            message.includes("email failed") || 
@@ -324,7 +525,8 @@ export default function Results() {
       const successful = results.filter(r => r.status === 'fulfilled').length;
       const failed = results.filter(r => r.status === 'rejected').length;
       
-      fetchResults();
+      await fetchResults(selectedSlotNumber);
+      await fetchStatistics();
       setNotification({
         message: `Results released: ${successful} successful, ${failed} failed`,
         type: successful > 0 ? "success" : "error",
@@ -347,9 +549,7 @@ export default function Results() {
         { withCredentials: true }
       );
       
-     
       const message = response.data;
-      
       
       if (typeof message === 'string' && message.includes("not configured")) {
         setNotification({
@@ -362,6 +562,9 @@ export default function Results() {
           type: "success",
         });
       }
+      
+      await fetchResults(selectedSlotNumber);
+      await fetchStatistics();
     } catch (err) {
       console.error(err);
       setNotification({
@@ -378,7 +581,9 @@ export default function Results() {
           axios.put(`/admin/results/${r.id}`, r, { withCredentials: true })
         )
       );
-      fetchResults();
+      await fetchResults(selectedSlotNumber);
+      await fetchSlotWiseData();
+      await fetchStatistics();
       setNotification({ message: "Candidates updated successfully!", type: "success" });
       setSelectedResults([]);
     } catch (err) {
@@ -408,7 +613,9 @@ export default function Results() {
         type: successful > 0 ? "success" : "error" 
       });
       setSelectedResults([]);
-      fetchResults();
+      await fetchResults(selectedSlotNumber);
+      await fetchSlotWiseData();
+      await fetchStatistics();
     } catch (err) {
       console.error(err);
       setNotification({ 
@@ -448,6 +655,29 @@ export default function Results() {
     setIsEditModalOpen(true);
   };
 
+  const handleViewSlot = async (slotNumber) => {
+    console.log("👀 Viewing slot:", slotNumber);
+    await fetchResults(slotNumber);
+    setCurrentPage(1);
+  };
+
+  const handleBackToAll = async () => {
+    console.log("🔙 Back to all results");
+    setViewMode("all");
+    setSelectedSlotNumber(null);
+    setSlotFilter("All");
+    await fetchResults();
+    setCurrentPage(1);
+  };
+
+  const handleShowSlots = () => {
+    console.log("🎯 Switching to slot-wise view");
+    setViewMode("slots");
+    setCurrentPage(1);
+    
+    fetchSlotWiseData();
+  };
+
   return (
     <div className="p-8 bg-gray-50 min-h-full">
       <Notification
@@ -455,6 +685,7 @@ export default function Results() {
         type={notification.type}
         onClose={() => setNotification({ message: "", type: "" })}
       />
+      
       {isDetailsModalOpen && (
         <DetailsModal
           result={selectedResultDetails}
@@ -470,205 +701,329 @@ export default function Results() {
         />
       )}
 
+      
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-4xl font-bold text-gray-800">Candidate Results</h1>
-        <button
-          onClick={handleAutoMailSend}
-          className="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 shadow-md transition"
-        >
-          📧 Send Mails Automatically
-        </button>
+        <div>
+          <h1 className="text-4xl font-bold text-gray-800">Candidate Results</h1>
+          {selectedSlotNumber && (
+            <p className="text-gray-600 mt-2">
+              Viewing Slot {selectedSlotNumber} results
+            </p>
+          )}
+        </div>
+        <div className="flex space-x-2">
+          {selectedSlotNumber && (
+            <button
+              onClick={handleBackToAll}
+              className="bg-gray-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-700 shadow-md transition"
+            >
+              ← Back to All
+            </button>
+          )}
+          <button
+            onClick={handleAutoMailSend}
+            className="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 shadow-md transition"
+            disabled={loading}
+          >
+            📧 Send Mails Automatically
+          </button>
+        </div>
       </div>
 
       
-      <div className="bg-white p-4 rounded-xl shadow-md mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <input
-          type="text"
-          placeholder="Search by name, email, college..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={examFilter}
-          onChange={(e) => setExamFilter(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {examOptions.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="All">All Statuses</option>
-          <option value="Completed">Completed</option>
-          <option value="Result Released">Result Released</option>
-          <option value="Passed">Passed</option>
-          <option value="Failed">Failed</option>
-        </select>
-      </div>
-
-      
-      {selectedResults.length > 0 && (
-        <div className="flex space-x-4 mb-4">
-          <button
-            onClick={handleBulkRelease}
-            className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors"
-          >
-            Release Results ({selectedResults.length})
-          </button>
-          <button
-            onClick={handleEditSelected}
-            className="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors"
-          >
-            Edit ({selectedResults.length})
-          </button>
-          <button
-            onClick={handleBulkDelete}
-            className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Delete ({selectedResults.length})
-          </button>
+      {statistics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-600 text-sm font-semibold mb-2">Total Results</h3>
+            <p className="text-3xl font-bold text-blue-600">{statistics.totalResults}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-600 text-sm font-semibold mb-2">Pass Rate</h3>
+            <p className="text-3xl font-bold text-green-600">{statistics.passPercentage}%</p>
+            <p className="text-sm text-gray-500 mt-1">{statistics.totalPassed} passed</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-600 text-sm font-semibold mb-2">Average Score</h3>
+            <p className="text-3xl font-bold text-purple-600">{statistics.averageScore}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-gray-600 text-sm font-semibold mb-2">Total Slots</h3>
+            <p className="text-3xl font-bold text-orange-600">{statistics.totalSlots}</p>
+          </div>
         </div>
       )}
 
       
-      <div className="bg-white rounded-2xl shadow-xl overflow-x-auto">
-        <table className="min-w-full">
-          <thead className="bg-gray-200">
-            <tr className="text-gray-700 uppercase text-sm leading-normal">
-              <th className="py-4 px-6 text-left">
-                <input
-                  type="checkbox"
-                  onChange={handleSelectAll}
-                  checked={areAllOnPageSelected}
-                />
-              </th>
-              <th className="py-4 px-6 text-left cursor-pointer" onClick={() => requestSort("id")}>
-                ID {getSortIndicator("id")}
-              </th>
-              <th className="py-4 px-6 text-left cursor-pointer" onClick={() => requestSort("name")}>
-                Candidate Name {getSortIndicator("name")}
-              </th>
-              <th className="py-4 px-6 text-left">College</th>
-              <th className="py-4 px-6 text-left">Email</th>
-              <th className="py-4 px-6 text-left">Exam</th>
-              <th className="py-4 px-6 text-center cursor-pointer" onClick={() => requestSort("score")}>
-                Score {getSortIndicator("score")}
-              </th>
-              <th className="py-4 px-6 text-center">Status</th>
-              <th className="py-4 px-6 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-700 text-sm font-light">
-            {paginatedResults.length === 0 ? (
-              <tr>
-                <td colSpan="9" className="py-8 text-center text-gray-500">
-                  No results found
-                </td>
-              </tr>
-            ) : (
-              paginatedResults.map((r) => (
-                <tr
-                  key={r.id}
-                  className={`border-b border-gray-200 transition-colors ${selectedResults.includes(r.id)
-                      ? "bg-blue-50"
-                      : "hover:bg-gray-100"
-                    }`}
-                >
-                  <td className="py-4 px-6 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedResults.includes(r.id)}
-                      onChange={() => handleSelectOne(r.id)}
-                    />
-                  </td>
-                  <td className="py-4 px-6 text-left font-semibold">{r.id}</td>
-                  <td className="py-4 px-6 text-left font-medium">{r.name}</td>
-                  <td className="py-4 px-6 text-left">{r.collegeName}</td>
-                  <td className="py-4 px-6 text-left">{r.email}</td>
-                  <td className="py-4 px-6 text-left">{r.exam}</td>
-                  <td className="py-4 px-6 text-center font-semibold text-blue-700">
-                    {r.score}
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${r.status === "Result Released"
-                          ? "bg-blue-100 text-blue-800"
-                          : r.status === "Passed"
-                            ? "bg-green-100 text-green-800"
-                            : r.status === "Failed"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-yellow-100 text-yellow-800"
-                        }`}
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-center flex items-center justify-center space-x-2">
-                    <button
-                      onClick={() => handleViewDetails(r)}
-                      className="text-purple-600 hover:text-purple-800 font-semibold"
-                      title="View Details"
-                    >
-                      Details
-                    </button>
-                    <button
-                      onClick={() => handleReleaseResult(r.id)}
-                      disabled={r.status === "Result Released"}
-                      className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      title="Release Result"
-                    >
-                      Release
-                    </button>
-                    <button
-                      onClick={() => handleDeleteOne(r.id)}
-                      className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition-colors"
-                      title="Delete Result"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        
-        <div className="flex justify-between items-center p-4">
-          <span className="text-sm text-gray-700">
-            Page <strong>{currentPage}</strong> of{" "}
-            <strong>{totalPages || 1}</strong>
-            {sortedAndFilteredResults.length > 0 && (
-              <span className="ml-2">
-                ({sortedAndFilteredResults.length} result{sortedAndFilteredResults.length !== 1 ? 's' : ''})
-              </span>
-            )}
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
+      <div className="bg-white p-4 rounded-xl shadow-md mb-6 flex justify-between items-center">
+        <div className="flex space-x-2">
+          <button
+            onClick={handleBackToAll}
+            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              viewMode === "all" || viewMode === "filtered"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            📋 All Results
+          </button>
+          <button
+            onClick={handleShowSlots}
+            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              viewMode === "slots"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            🎯 Slot-wise View
+          </button>
         </div>
+        
+        {(viewMode === "all" || viewMode === "filtered") && (
+          <div className="text-sm text-gray-600">
+            Showing {sortedAndFilteredResults.length} of {results.length} results
+          </div>
+        )}
       </div>
+
+      
+      {viewMode === "slots" && (
+        <SlotWiseView 
+          slotsData={slotsData} 
+          onViewSlot={handleViewSlot}
+          loading={slotLoading}
+        />
+      )}
+
+     
+      {(viewMode === "all" || viewMode === "filtered") && (
+        <>
+          
+          <div className="bg-white p-4 rounded-xl shadow-md mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input
+              type="text"
+              placeholder="Search by name, email, college..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={examFilter}
+              onChange={(e) => setExamFilter(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {examOptions.map((e) => (
+                <option key={e} value={e}>
+                  {e === "All" ? "All Exams" : e}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Completed">Completed</option>
+              <option value="Result Released">Result Released</option>
+              <option value="Passed">Passed</option>
+              <option value="Failed">Failed</option>
+            </select>
+            <select
+              value={slotFilter}
+              onChange={(e) => setSlotFilter(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={selectedSlotNumber !== null}
+            >
+              {slotOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s === "All" ? "All Slots" : `Slot ${s}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+         
+          {selectedResults.length > 0 && (
+            <div className="flex space-x-4 mb-4">
+              <button
+                onClick={handleBulkRelease}
+                className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors"
+              >
+                Release Results ({selectedResults.length})
+              </button>
+              <button
+                onClick={handleEditSelected}
+                className="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors"
+              >
+                Edit ({selectedResults.length})
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete ({selectedResults.length})
+              </button>
+            </div>
+          )}
+
+          {/* Results Table */}
+          <div className="bg-white rounded-2xl shadow-xl overflow-x-auto">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">Loading results...</p>
+              </div>
+            ) : (
+              <table className="min-w-full">
+                <thead className="bg-gray-200">
+                  <tr className="text-gray-700 uppercase text-sm leading-normal">
+                    <th className="py-4 px-6 text-left">
+                      <input
+                        type="checkbox"
+                        onChange={handleSelectAll}
+                        checked={areAllOnPageSelected}
+                      />
+                    </th>
+                    <th className="py-4 px-6 text-left cursor-pointer" onClick={() => requestSort("id")}>
+                      ID {getSortIndicator("id")}
+                    </th>
+                    <th className="py-4 px-6 text-left cursor-pointer" onClick={() => requestSort("name")}>
+                      Candidate Name {getSortIndicator("name")}
+                    </th>
+                    <th className="py-4 px-6 text-left">College</th>
+                    <th className="py-4 px-6 text-left">Email</th>
+                    <th className="py-4 px-6 text-left">Exam</th>
+                    <th className="py-4 px-6 text-center cursor-pointer" onClick={() => requestSort("slot")}>
+                      Slot {getSortIndicator("slot")}
+                    </th>
+                    <th className="py-4 px-6 text-center cursor-pointer" onClick={() => requestSort("score")}>
+                      Score {getSortIndicator("score")}
+                    </th>
+                    <th className="py-4 px-6 text-center">Status</th>
+                    <th className="py-4 px-6 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-700 text-sm font-light">
+                  {paginatedResults.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" className="py-8 text-center text-gray-500">
+                        {selectedSlotNumber 
+                          ? `No results found for Slot ${selectedSlotNumber}`
+                          : "No results found"
+                        }
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedResults.map((r) => (
+                      <tr
+                        key={r.id}
+                        className={`border-b border-gray-200 transition-colors ${selectedResults.includes(r.id)
+                            ? "bg-blue-50"
+                            : "hover:bg-gray-100"
+                          }`}
+                      >
+                        <td className="py-4 px-6 text-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedResults.includes(r.id)}
+                            onChange={() => handleSelectOne(r.id)}
+                          />
+                        </td>
+                        <td className="py-4 px-6 text-left font-semibold">{r.id}</td>
+                        <td className="py-4 px-6 text-left font-medium">{r.name}</td>
+                        <td className="py-4 px-6 text-left">{r.collegeName}</td>
+                        <td className="py-4 px-6 text-left">{r.email}</td>
+                        <td className="py-4 px-6 text-left">{r.exam}</td>
+                        <td className="py-4 px-6 text-center">
+                          {r.slot ? (
+                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-semibold">
+                              Slot {r.slot.slotNumber}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No Slot</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-6 text-center font-semibold text-blue-700">
+                          {r.score}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${r.status === "Result Released"
+                                ? "bg-blue-100 text-blue-800"
+                                : r.status === "Passed"
+                                  ? "bg-green-100 text-green-800"
+                                  : r.status === "Failed"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button
+                              onClick={() => handleViewDetails(r)}
+                              className="text-purple-600 hover:text-purple-800 font-semibold text-xs"
+                              title="View Details"
+                            >
+                              Details
+                            </button>
+                            <button
+                              onClick={() => handleReleaseResult(r.id)}
+                              disabled={r.status === "Result Released"}
+                              className="bg-blue-600 text-white font-bold py-1 px-3 text-xs rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                              title="Release Result"
+                            >
+                              Release
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOne(r.id)}
+                              className="bg-red-600 text-white font-bold py-1 px-3 text-xs rounded-lg shadow-md hover:bg-red-700 transition-colors"
+                              title="Delete Result"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            
+            <div className="flex justify-between items-center p-4 border-t">
+              <span className="text-sm text-gray-700">
+                Page <strong>{currentPage}</strong> of{" "}
+                <strong>{totalPages || 1}</strong>
+                {sortedAndFilteredResults.length > 0 && (
+                  <span className="ml-2">
+                    ({sortedAndFilteredResults.length} result{sortedAndFilteredResults.length !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

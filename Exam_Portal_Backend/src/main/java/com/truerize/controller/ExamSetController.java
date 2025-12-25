@@ -1,6 +1,5 @@
 package com.truerize.controller;
 
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truerize.service.ExamSetService;
+
 @RestController
 @RequestMapping("/api/examset")
 @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
@@ -31,14 +31,61 @@ public class ExamSetController {
     @Autowired
     private ExamSetService examSetService;
 
-    
+    @PostMapping("/{examId}/generate")
+    public ResponseEntity<?> generateQuestionSets(@PathVariable Long examId) {
+        
+        log.info("========================================");
+        log.info("🎯 GENERATE QUESTION SETS REQUEST");
+        log.info("   Exam ID: {}", examId);
+        log.info("========================================");
+        
+        try {
+            if (examId == null || examId <= 0) {
+                log.error("❌ Invalid exam ID: {}", examId);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
+                        "success", false, 
+                        "error", "Invalid exam ID: " + examId
+                    ));
+            }
+            
+            Map<String, Object> result = examSetService.generateQuestionSets(examId);
+            
+            if (Boolean.TRUE.equals(result.get("success"))) {
+                log.info("✅ SUCCESS: Question sets generated");
+                return ResponseEntity.ok(result);
+            } else {
+                log.error("❌ FAILED: {}", result.get("error"));
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+            }
+            
+        } catch (IllegalStateException e) {
+            log.error("❌ Business logic error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "examId", examId
+                ));
+            
+        } catch (Exception e) {
+            log.error("❌ Unexpected error generating question sets", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                    "success", false,
+                    "error", "Failed to generate question sets: " + e.getMessage(),
+                    "examId", examId
+                ));
+        }
+    }
+
     @PostMapping("/auto-assign")
     public ResponseEntity<?> autoAssignStudent(@RequestBody Map<String, Object> request) {
         try {
             String userId = (String) request.get("userId");
             Long examId = Long.parseLong(request.get("examId").toString());
             
-            log.info("Auto-assign request: User {} to Exam {}", userId, examId);
+            log.info("🎯 Auto-assign request: User {} to Exam {}", userId, examId);
             
             Map<String, Object> result = examSetService.autoAssignStudentToSet(userId, examId);
             
@@ -54,41 +101,11 @@ public class ExamSetController {
         }
     }
 
-    @PostMapping("/{examId}/generate")
-    public ResponseEntity<?> generateQuestionSets(@PathVariable Long examId) {
-        
-        
-        try {
-            if (examId == null) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("success", false, "error", "examId is required"));
-            }
-            
-            log.info(" Exam ID: {}", examId);
-            
-            Map<String, Object> result = examSetService.generateQuestionSets(examId);
-            
-            if (Boolean.TRUE.equals(result.get("success"))) {
-                
-                return ResponseEntity.ok(result);
-            } else {
-                log.error("❌ FAILED: Question sets generation failed");
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
-            }
-            
-        } catch (Exception e) {
-            log.error("❌ Error generating question sets", e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Failed to generate question sets: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-        }
-    }
-
+   
     @GetMapping("/{examId}/sets")
     public ResponseEntity<?> getQuestionSets(@PathVariable Long examId) {
         try {
-            log.info("Fetching question sets for exam: {}", examId);
+            log.info("📋 Fetching question sets for exam: {}", examId);
             
             List<Map<String, Object>> sets = examSetService.getQuestionSetsForExam(examId);
             
@@ -105,7 +122,7 @@ public class ExamSetController {
             @RequestParam String userId,
             @RequestParam Long examId) {
         try {
-            log.info(" Fetching assignment for user {} in exam {}", userId, examId);
+            log.info("📋 Fetching assignment for user {} in exam {}", userId, examId);
             
             var assignment = examSetService.getStudentAssignment(userId, examId);
             
@@ -131,7 +148,7 @@ public class ExamSetController {
         }
     }
 
-    
+   
     @PostMapping("/assign")
     public ResponseEntity<?> assignStudent(@RequestBody Map<String, Object> request) {
         try {
@@ -152,7 +169,7 @@ public class ExamSetController {
         }
     }
 
-    
+   
     @GetMapping("/{examId}/stats")
     public ResponseEntity<?> getExamStats(@PathVariable Long examId) {
         try {
@@ -169,7 +186,7 @@ public class ExamSetController {
     @PostMapping("/{examId}/delete-sets")
     public ResponseEntity<?> deleteQuestionSetsPost(@PathVariable Long examId) {
         try {
-            log.info("Deleting question sets for exam: {}", examId);
+            log.info("🗑️ Deleting question sets for exam: {}", examId);
             
             Map<String, Object> result = examSetService.deleteQuestionSetsForExam(examId);
             
@@ -185,11 +202,11 @@ public class ExamSetController {
         }
     }
 
-    
+   
     @DeleteMapping("/{examId}")
     public ResponseEntity<?> deleteQuestionSets(@PathVariable Long examId) {
         try {
-            log.info("Deleting question sets for exam: {}", examId);
+            log.info("🗑️ Deleting question sets for exam: {}", examId);
             
             Map<String, Object> result = examSetService.deleteQuestionSetsForExam(examId);
             
@@ -205,24 +222,35 @@ public class ExamSetController {
         }
     }
     
-   
+    
     @GetMapping("/{examId}/set/{setNumber}/debug")
     public ResponseEntity<?> debugSetDetails(
             @PathVariable Long examId,
             @PathVariable Integer setNumber) {
         try {
-            log.info("Debug request for Exam {} Set {}", examId, setNumber);
+            log.info("🔍 Debug request for Exam {} Set {}", examId, setNumber);
             
             Map<String, Object> debug = examSetService.getSetDetailsWithQuestions(examId, setNumber);
             
             return ResponseEntity.ok(debug);
         } catch (Exception e) {
             log.error("❌ Error in debug endpoint", e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", e.getMessage());
-            errorResponse.put("examId", examId);
-            errorResponse.put("setNumber", setNumber);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                    "error", e.getMessage(),
+                    "examId", examId,
+                    "setNumber", setNumber
+                ));
         }
+    }
+    
+    
+    @GetMapping("/health")
+    public ResponseEntity<?> healthCheck() {
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "service", "ExamSetService",
+            "timestamp", System.currentTimeMillis()
+        ));
     }
 }

@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import axios from '../api/axiosConfig';
+import NotificationModal from './NotificationModal';
+import logger from '../utils/logger';
 
-const ProtectedRoute = ({ 
-  children, 
-  allowedRoles = [], 
-  requiresExamFlow = false, 
-  requiresQuizAccess = false 
+const ProtectedRoute = ({
+  children,
+  allowedRoles = [],
+  requiresExamFlow = false,
+  requiresQuizAccess = false
 }) => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
   const location = useLocation();
 
   
@@ -26,9 +30,11 @@ const ProtectedRoute = ({
         
         
         if (location.pathname === '/camera') {
-          alert('⚠️ You cannot navigate back during camera verification!\n\nPlease complete the verification process.');
+          setModalMessage('⚠️ You cannot navigate back during camera verification!\n\nPlease complete the verification process.');
+          setShowModal(true);
         } else if (location.pathname === '/quiz') {
-          alert('⚠️ You cannot navigate back during the exam!\n\nPlease use the "Submit Exam" button to exit.');
+          setModalMessage('⚠️ You cannot navigate back during the exam!\n\nPlease use the "Submit Exam" button to exit.');
+          setShowModal(true);
         }
       };
 
@@ -81,7 +87,8 @@ const ProtectedRoute = ({
             setInitialCheckDone(true);
             
             setTimeout(() => {
-              alert('⚠️ Access Denied!\n\nYou must start the exam from the Candidate Dashboard.\n\nPlease click "Start Examination" button to begin.');
+              setModalMessage('⚠️ Access Denied!\n\nYou must start the exam from the Candidate Dashboard.\n\nPlease click "Start Examination" button to begin.');
+              setShowModal(true);
             }, 100);
           } else {
             setHasAccess(true);
@@ -98,7 +105,8 @@ const ProtectedRoute = ({
             setInitialCheckDone(true);
 
             setTimeout(() => {
-              alert('⚠️ Access Denied!\n\nYou must complete camera verification first.\n\nPlease go to Candidate Dashboard and follow the proper workflow.');
+              setModalMessage('⚠️ Access Denied!\n\nYou must complete camera verification first.\n\nPlease go to Candidate Dashboard and follow the proper workflow.');
+              setShowModal(true);
             }, 100);
           } else {
             setHasAccess(true);
@@ -115,7 +123,7 @@ const ProtectedRoute = ({
         setInitialCheckDone(true);
       }
     } catch (err) {
-      console.error("❌ Authentication check failed:", err);
+      logger.error("Authentication check failed", err);
       setUser(null);
       setHasAccess(false);
       setInitialCheckDone(true);

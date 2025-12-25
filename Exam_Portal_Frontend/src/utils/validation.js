@@ -1,90 +1,101 @@
 // Input validation utilities for security and data integrity
-// Input validation utilities for security and data integrity
 
+// ---------------- EMAIL VALIDATION ----------------
 export const validateEmail = (email) => {
-  
-  if (typeof email !== "string" || email.length > 254) return false;
-  const parts = email.split("@");
-  if (parts.length !== 2) return false;
+  if (typeof email !== 'string') return false;
+  if (email.length > 254) return false;
 
-  const [local, domain] = parts;
-  if (local.length === 0 || local.length > 64) return false;
-  if (domain.length === 0 || domain.length > 253) return false;
-  const localRegex = /^[A-Za-z0-9._%+-]+$/;
-  const domainRegex = /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+  // Safe, linear-time, length-bounded regex (SonarQube compliant)
+  const emailRegex =
+    /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,189}\.[A-Za-z]{2,}$/;
 
-  return localRegex.test(local) && domainRegex.test(domain);
+  return emailRegex.test(email);
 };
 
-export const sanitizeHtmlInput = (input) => {
-  if (typeof input !== "string") return input;
+// ---------------- PASSWORD VALIDATION ----------------
+export const validatePassword = (password) => {
+  if (typeof password !== 'string') return false;
 
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;")
-    .trim();
+  // At least 8 chars, 1 uppercase, 1 lowercase, 1 number
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+
+  return passwordRegex.test(password);
 };
 
-
-
+// ---------------- USER ID VALIDATION ----------------
 export const validateUserId = (userId) => {
-  // Allow alphanumeric characters, hyphens, and underscores
-  const userIdRegex = /^[a-zA-Z0-9_-]+$/;
-  return userIdRegex.test(userId) && userId.length >= 3 && userId.length <= 50;
+  if (typeof userId !== 'string') return false;
+
+  // Alphanumeric + _ -
+  const userIdRegex = /^[A-Za-z0-9_-]{3,50}$/;
+  return userIdRegex.test(userId);
 };
 
+// ---------------- EXAM ID VALIDATION ----------------
 export const validateExamId = (examId) => {
-  // Allow positive integers
-  const num = parseInt(examId, 10);
-  return !isNaN(num) && num > 0;
+  const num = Number(examId);
+  return Number.isInteger(num) && num > 0;
 };
 
+// ---------------- INPUT SANITIZATION ----------------
+// NO REGEX → completely eliminates ReDoS risk
 export const sanitizeInput = (input) => {
   if (typeof input !== 'string') return input;
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;")
-    .trim();
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(input, 'text/html');
+
+  return (doc.body.textContent || '').trim();
 };
 
-
-export const validateFileUpload = (file, allowedTypes = [], maxSize = 10 * 1024 * 1024) => {
-  if (!file) return { valid: false, error: 'No file provided' };
+// ---------------- FILE UPLOAD VALIDATION ----------------
+export const validateFileUpload = (
+  file,
+  allowedTypes = [],
+  maxSize = 10 * 1024 * 1024
+) => {
+  if (!file) {
+    return { valid: false, error: 'No file provided' };
+  }
 
   if (file.size > maxSize) {
-    return { valid: false, error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit` };
+    return {
+      valid: false,
+      error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit`
+    };
   }
 
   if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
-    return { valid: false, error: `File type not allowed. Allowed types: ${allowedTypes.join(', ')}` };
+    return {
+      valid: false,
+      error: `File type not allowed. Allowed types: ${allowedTypes.join(', ')}`
+    };
   }
 
   return { valid: true };
 };
 
+// ---------------- ANSWER VALIDATION ----------------
 export const validateAnswer = (answer, questionType) => {
-  if (!answer || answer.trim() === '') {
+  if (typeof answer !== 'string' || answer.trim() === '') {
     return { valid: false, error: 'Answer cannot be empty' };
   }
 
   switch (questionType) {
     case 'mcq':
-      // For MCQ, answer should be a single letter A-D
+      // Single option A–D only (safe regex)
       if (!/^[A-D]$/.test(answer.toUpperCase())) {
         return { valid: false, error: 'Invalid MCQ answer format' };
       }
       break;
 
     case 'text':
-      // For text answers, basic length validation
       if (answer.length > 10000) {
-        return { valid: false, error: 'Answer too long (max 10000 characters)' };
+        return {
+          valid: false,
+          error: 'Answer too long (max 10000 characters)'
+        };
       }
       break;
 
@@ -95,8 +106,13 @@ export const validateAnswer = (answer, questionType) => {
   return { valid: true };
 };
 
+// ---------------- SESSION DATA VALIDATION ----------------
 export const validateSessionData = (data) => {
   const errors = [];
+
+  if (!data || typeof data !== 'object') {
+    return { valid: false, errors: ['Invalid session data'] };
+  }
 
   if (!data.userId || !validateUserId(data.userId)) {
     errors.push('Invalid user ID');

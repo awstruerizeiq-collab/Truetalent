@@ -2,9 +2,12 @@ package com.truerize.controller;
 
 import java.time.LocalDateTime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,7 +26,10 @@ import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/candidate")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class TestSubmissionController {
+
+    private static final Logger log = LoggerFactory.getLogger(TestSubmissionController.class);
 
     @Autowired
     private UserRepository userRepository;
@@ -39,18 +45,19 @@ public class TestSubmissionController {
             @RequestBody TestSubmissionDTO dto,
             HttpSession session) {
 
-        System.out.println("========== 📝 EXAM SUBMISSION REQUEST ==========");
-        System.out.println("DTO: " + dto);
+        log.info("========== 📝 EXAM SUBMISSION REQUEST ==========");
+        log.info("DTO: {}", dto);
 
         try {
-            
+            // Get userId from session
             Object sessionUserId = session.getAttribute("userId");
             if (sessionUserId == null) {
-                System.out.println("❌ ERROR: Unauthorized - No session user ID");
+                log.error("❌ ERROR: Unauthorized - No session user ID");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(null);
             }
 
-            int userId;
+            // Convert session userId to Integer
+            Integer userId;
             if (sessionUserId instanceof Integer) {
                 userId = (Integer) sessionUserId;
             } else if (sessionUserId instanceof String) {
@@ -59,33 +66,34 @@ public class TestSubmissionController {
                 userId = Integer.parseInt(sessionUserId.toString());
             }
 
-            System.out.println("👤 Session User ID: " + userId);
+            log.info("👤 Session User ID: {}", userId);
 
-            
+            // Find user by Integer ID
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
 
-            System.out.println("✅ User found: " + user.getName());
+            log.info("✅ User found: {}", user.getName());
 
+            // Get exam
             int examId = dto.getExam().getId();
             Exam exam = examRepository.findById(examId)
                     .orElseThrow(() -> new RuntimeException("Exam not found with ID: " + examId));
 
-            System.out.println("✅ Exam found: " + exam.getTitle());
+            log.info("✅ Exam found: {}", exam.getTitle());
 
-            
+            // Get answers and video URL
             String answersJson = dto.getAnswersJson();
             String videoUrl = dto.getVideoUrl();
 
-            
+            // Handle empty answers
             if (answersJson == null || answersJson.trim().isEmpty()) {
                 answersJson = "{}";
             }
 
-            System.out.println("📹 Video URL from DTO: " + videoUrl);
-            System.out.println("📄 Answers JSON length: " + answersJson.length());
+            log.info("📹 Video URL from DTO: {}", videoUrl);
+            log.info("📄 Answers JSON length: {}", answersJson.length());
 
-           
+            // Create TestSubmission entity
             TestSubmission submission = new TestSubmission();
             submission.setUser(user);
             submission.setExam(exam);
@@ -93,18 +101,19 @@ public class TestSubmissionController {
             submission.setVideoUrl(videoUrl); 
             submission.setStatus("Completed");
             submission.setSubmittedAt(LocalDateTime.now());
-            submission.setScore(0); 
+            submission.setScore(0); // Will be calculated in service
 
-            System.out.println("🔄 Saving submission to database...");
+            log.info("🔄 Saving submission to database...");
 
-           
+         
             TestSubmission savedSubmission = testSubmissionService.submitTest(submission);
 
-            System.out.println("========== ✅ EXAM SUBMITTED SUCCESSFULLY ==========");
-            System.out.println("Submission ID: " + savedSubmission.getId());
-            System.out.println("Video URL Saved: " + savedSubmission.getVideoUrl());
+            log.info("========== ✅ EXAM SUBMITTED SUCCESSFULLY ==========");
+            log.info("Submission ID: {}", savedSubmission.getId());
+            log.info("Video URL Saved: {}", savedSubmission.getVideoUrl());
+            log.info("Score: {}", savedSubmission.getScore());
 
-            
+           
             TestSubmissionResponseDTO responseDTO = new TestSubmissionResponseDTO();
             responseDTO.setSubmissionId(savedSubmission.getId());
             responseDTO.setStudentName(user.getName());
@@ -118,9 +127,16 @@ public class TestSubmissionController {
 
             return ResponseEntity.ok(responseDTO);
 
+        } catch (NumberFormatException e) {
+            log.error("❌ ERROR: Invalid user ID format", e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+            
+        } catch (RuntimeException e) {
+            log.error("❌ ERROR: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+            
         } catch (Exception e) {
-            System.err.println("❌ ERROR: Failed to submit exam");
-            e.printStackTrace();
+            log.error("❌ ERROR: Failed to submit exam", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }

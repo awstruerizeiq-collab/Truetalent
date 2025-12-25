@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -13,16 +15,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truerize.entity.Exam;
 import com.truerize.entity.Question;
 import com.truerize.entity.Result;
+import com.truerize.entity.Slot;
 import com.truerize.entity.TestSubmission;
 import com.truerize.entity.User;
 import com.truerize.repository.ExamRepository;
 import com.truerize.repository.QuestionRepository;
 import com.truerize.repository.ResultRepository;
+import com.truerize.repository.SlotRepository;
 import com.truerize.repository.TestSubmissionRepository;
 import com.truerize.repository.UserRepository;
 
 @Service
 public class TestSubmissionService {
+
+    private static final Logger log = LoggerFactory.getLogger(TestSubmissionService.class);
+    private static final int PASSING_SCORE = 20;
 
     @Autowired
     private TestSubmissionRepository testSubmissionRepository;
@@ -38,6 +45,9 @@ public class TestSubmissionService {
 
     @Autowired
     private ExamRepository examRepository;
+    
+    @Autowired
+    private SlotRepository slotRepository;
 
     public TestSubmission submitTest(TestSubmission submission) {
         submission.setSubmittedAt(LocalDateTime.now());
@@ -54,21 +64,39 @@ public class TestSubmissionService {
         Exam exam = examRepository.findById(savedSubmission.getExam().getId())
                                   .orElseThrow(() -> new RuntimeException("Exam not found"));
       
+        // 🔥 CRITICAL: Get the user's slot
+        Slot userSlot = user.getSlot();
+        
+        if (userSlot == null) {
+            log.error("❌ User {} has no slot assigned!", user.getId());
+            throw new RuntimeException("User must have a slot assigned");
+        }
+        
+        log.info("✅ User slot found: Slot #{} (ID: {})", userSlot.getSlotNumber(), userSlot.getId());
+        
+        // Create Result entity with slot
         Result result = new Result();
         result.setName(user.getName());
         result.setCollegeName(user.getCollegeName());
         result.setEmail(user.getEmail());
         result.setExam(exam.getTitle());
         result.setScore(savedSubmission.getScore());
-        result.setStatus("Completed");
+        result.setSlot(userSlot); // 🔥 LINK RESULT TO SLOT
+        
+        // Set status based on score
+        if (savedSubmission.getScore() >= PASSING_SCORE) {
+            result.setStatus("Passed");
+        } else {
+            result.setStatus("Failed");
+        }
 
-        System.out.println("Saving result: user=" + user.getName() +
-                ", college=" + user.getCollegeName() +
-                ", email=" + user.getEmail() +
-                ", exam=" + exam.getTitle() +
-                ", score=" + savedSubmission.getScore());
+        log.info("💾 Saving result: user={}, college={}, email={}, exam={}, score={}, slot={}",
+                user.getName(), user.getCollegeName(), user.getEmail(), 
+                exam.getTitle(), savedSubmission.getScore(), userSlot.getSlotNumber());
 
         resultRepository.save(result);
+        
+        log.info("✅ Result saved successfully with Slot #{}", userSlot.getSlotNumber());
 
         return savedSubmission;
     }
@@ -102,7 +130,6 @@ public class TestSubmissionService {
                         break;
 
                     case "verbal":
-                        // Award marks if any valid audio response is provided
                         if (!givenAnswer.equalsIgnoreCase("audio_file_not_recorded")
                                 && !givenAnswer.equalsIgnoreCase("blank_answer")) {
                             totalScore += q.getMarks();
@@ -114,7 +141,7 @@ public class TestSubmissionService {
                 }
             }
         } catch (Exception e) {
-            System.out.println("Error calculating score: " + e.getMessage());
+            log.error("❌ Error calculating score: {}", e.getMessage());
         }
 
         return totalScore;

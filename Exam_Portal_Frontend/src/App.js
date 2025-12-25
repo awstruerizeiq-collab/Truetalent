@@ -19,6 +19,8 @@ const QuizInterface = lazy(() => import("./pages/Candidate/QuizInterface"));
 const Feedback = lazy(() => import("./pages/Candidate/Feedback"));
 const Run = lazy(() => import("./pages/Candidate/Run"));
 
+
+
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -131,6 +133,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+          
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

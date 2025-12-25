@@ -1,9 +1,6 @@
 import axios from "axios";
 import logger from "../utils/logger";
 
-// IMPORTANT:
-// ALWAYS prefer /api so that requests pass through nginx proxy.
-// DO NOT assign "http://localhost:8080/api" anywhere in frontend.
 
 const axiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL || "/api",

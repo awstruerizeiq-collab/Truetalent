@@ -30,7 +30,6 @@ public class VideoUploadController {
     @Autowired
     private TestSubmissionRepository testSubmissionRepository;
 
-    
     @Value("${file.upload-dir:uploads/videos}")
     private String uploadDir;
 
@@ -44,7 +43,7 @@ public class VideoUploadController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-           
+
             Object sessionUserId = session.getAttribute("userId");
             if (sessionUserId == null) {
                 response.put("success", false);
@@ -52,31 +51,28 @@ public class VideoUploadController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
 
-            
             if (videoFile.isEmpty()) {
                 response.put("success", false);
                 response.put("message", "Video file is empty");
                 return ResponseEntity.badRequest().body(response);
             }
 
-            
             Path uploadPath = Paths.get(uploadDir);
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
 
             String originalFilename = videoFile.getOriginalFilename();
-            String fileExtension = originalFilename != null && originalFilename.contains(".") 
-                ? originalFilename.substring(originalFilename.lastIndexOf(".")) 
-                : ".webm";
-            
-            String uniqueFilename = String.format("exam_%s_student_%s_%s%s", 
-                examId, 
-                studentId, 
-                UUID.randomUUID().toString(), 
-                fileExtension);
+            String fileExtension = originalFilename != null && originalFilename.contains(".")
+                    ? originalFilename.substring(originalFilename.lastIndexOf("."))
+                    : ".webm";
 
-           
+            String uniqueFilename = String.format("exam_%s_student_%s_%s%s",
+                    examId,
+                    studentId,
+                    UUID.randomUUID().toString(),
+                    fileExtension);
+
             Path filePath = uploadPath.resolve(uniqueFilename);
             Files.copy(videoFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
             String videoUrl = "/uploads/videos/" + uniqueFilename;
@@ -90,7 +86,7 @@ public class VideoUploadController {
             return ResponseEntity.ok(response);
 
         } catch (IOException e) {
-            e.printStackTrace();
+
             response.put("success", false);
             response.put("message", "Failed to upload video: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);

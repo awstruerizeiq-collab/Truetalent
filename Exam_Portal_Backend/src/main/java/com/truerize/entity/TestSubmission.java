@@ -40,12 +40,11 @@ public class TestSubmission {
 
     private String videoUrl;
 
-    // 🗑️ Removed ProctoringEvent relationship
 
     public TestSubmission() {
     }
 
-    // ----- Getters and Setters -----
+  
     public int getId() {
         return id;
     }
