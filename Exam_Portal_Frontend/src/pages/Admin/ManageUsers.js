@@ -1,27 +1,26 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import axios from "../../api/axiosConfig";
+import axios from "axios";
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
 
-const TOTAL_SLOTS = 10;
-const SLOT_NAMES = Array.from({ length: TOTAL_SLOTS }, (_, i) => `Slot ${i + 1}`);
-
-
-const Notification = ({ message, type, onClose }) => {
+const Notification = ({ message, type, onClose, persistent }) => {
   useEffect(() => {
-    if (!message) return;
+    if (!message || persistent) return;
     const timer = setTimeout(onClose, 5000);
     return () => clearTimeout(timer);
-  }, [message, onClose]);
+  }, [message, onClose, persistent]);
 
   if (!message) return null;
 
   return (
-    <div className={`fixed top-5 right-5 p-4 rounded-lg shadow-lg text-white z-50 ${type==='success'?'bg-green-500':'bg-red-500'}`}>
-      {message} <button onClick={onClose} className="ml-4 font-bold">✕</button>
+    <div className={`fixed top-5 right-5 p-4 rounded-lg shadow-lg text-white z-50 max-w-md ${type==='success'?'bg-green-500':'bg-red-500'}`}>
+      <div className="flex items-start justify-between">
+        <span className="flex-1">{message}</span>
+        <button onClick={onClose} className="ml-4 font-bold text-xl hover:opacity-80">✕</button>
+      </div>
     </div>
   );
 };
-
 
 const StatusBadge = ({ status }) => {
   const statusStyles = {
@@ -30,59 +29,96 @@ const StatusBadge = ({ status }) => {
     'Completed Exam': 'bg-blue-100 text-blue-800',
     'Assigned Exam': 'bg-yellow-100 text-yellow-800',
   };
-  return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[status]}`}>{status}</span>;
+  return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[status] || 'bg-gray-100 text-gray-800'}`}>{status}</span>;
 };
-
 
 export default function ManageUsers() {
   const ITEMS_PER_PAGE = 5;
 
-  
   const [allUsers, setAllUsers] = useState([]);
-  const [currentSlot, setCurrentSlot] = useState(SLOT_NAMES[0]); 
+  const [slots, setSlots] = useState([]);
+  const [currentSlotId, setCurrentSlotId] = useState(null);
   const [exams, setExams] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAssignExamModalOpen, setIsAssignExamModalOpen] = useState(false);
+  const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
+  const [isDeleteSlotModalOpen, setIsDeleteSlotModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [slotToDelete, setSlotToDelete] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'ascending' });
-  const [notification, setNotification] = useState({ message: '', type: '' });
+  const [notification, setNotification] = useState({ message: '', type: '', persistent: false });
   const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState({ name: '', email: '', collegeName: '', password: '', status: 'Active' });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [backendError, setBackendError] = useState(false);
+  const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '' });
+  const [isSlotSubmitting, setIsSlotSubmitting] = useState(false);
+  const [editingSlot, setEditingSlot] = useState(null);
 
-  
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await axios.get('/admin/users', { withCredentials: true });
+      setIsLoading(true);
+      setBackendError(false);
+
+      const res = await axios.get(`${API_BASE_URL}/admin/users`, { withCredentials: true });
       setAllUsers(res.data);
       setSelectedUsers([]);
-      setCurrentPage(1);
+      setIsLoading(false);
     } catch (err) { 
-      console.error(err);
-      setNotification({ message: 'Failed to fetch users', type: 'error' });
+      console.error('Fetch users error:', err);
+      setIsLoading(false);
+      setBackendError(true);
+      
+      let errorMessage = 'Failed to fetch users. ';
+      if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+        errorMessage += 'Cannot connect to backend server. Please ensure the server is running and accessible.';
+      } else if (err.response) {
+        errorMessage += err.response.data?.message || `Server error: ${err.response.status}`;
+      } else {
+        errorMessage += 'Please check your connection and try again.';
+      }
+      
+      setNotification({ message: errorMessage, type: 'error', persistent: true });
     }
   }, []);
 
-  const fetchExams = async () => {
+  const fetchSlots = async () => {
     try {
-      const res = await axios.get('/admin/exams', { withCredentials: true });
-      setExams(res.data);
+      const res = await axios.get(`${API_BASE_URL}/admin/slots`);
+      setSlots(res.data);
+      if (res.data.length > 0 && !currentSlotId) {
+        setCurrentSlotId(res.data[0].id);
+      }
     } catch (err) { 
-      console.error(err);
-      setNotification({ message: 'Failed to fetch exams', type: 'error' });
+      console.error('Fetch slots error:', err);
+      setNotification({ message: 'Failed to fetch slots', type: 'error', persistent: false });
     }
   };
 
-  useEffect(() => { fetchUsers(); fetchExams(); }, [fetchUsers]);
+  const fetchExams = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/admin/exams`);
+      setExams(res.data);
+    } catch (err) { 
+      console.error('Fetch exams error:', err);
+      setNotification({ message: 'Failed to fetch exams', type: 'error', persistent: false });
+    }
+  };
 
-  
+  useEffect(() => { 
+    fetchUsers(); 
+    fetchSlots();
+    fetchExams(); 
+  }, [fetchUsers]);
+
   useEffect(() => {
     window.history.pushState(null, "", window.location.href);
     
@@ -93,6 +129,101 @@ export default function ManageUsers() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  const buildSlotStartDateTime = () => {
+    const slot = slots.find(s => s.id === currentSlotId);
+    if (!slot || !slot.date || !slot.time) return null;
+    return `${slot.date}T${slot.time}:00`;
+  };
+
+  const addNewSlot = () => {
+    setEditingSlot(null);
+    setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '' });
+    setIsSlotModalOpen(true);
+  };
+
+  const openEditSlotModal = (slot) => {
+    setEditingSlot(slot);
+    setSlotFormData({
+      slotNumber: slot.slotNumber.toString(),
+      date: slot.date || '',
+      time: slot.time || '',
+      collegeName: slot.collegeName || ''
+    });
+    setIsSlotModalOpen(true);
+  };
+
+  const handleCreateOrUpdateSlot = async () => {
+    if (!slotFormData.slotNumber || !slotFormData.date || !slotFormData.time) {
+      setNotification({ message: 'Please fill in slot number, date, and time', type: 'error', persistent: false });
+      return;
+    }
+
+    setIsSlotSubmitting(true);
+    try {
+      const payload = {
+        slotNumber: parseInt(slotFormData.slotNumber),
+        date: slotFormData.date,
+        time: slotFormData.time,
+        collegeName: slotFormData.collegeName || null
+      };
+
+      if (editingSlot) {
+        await axios.put(`${API_BASE_URL}/admin/slots/${editingSlot.id}`, payload);
+        setNotification({ message: 'Slot updated successfully!', type: 'success', persistent: false });
+      } else {
+        await axios.post(`${API_BASE_URL}/admin/slots`, payload);
+        setNotification({ message: 'Slot created successfully!', type: 'success', persistent: false });
+      }
+
+      await fetchSlots();
+      setIsSlotModalOpen(false);
+      setEditingSlot(null);
+    } catch (err) {
+      console.error('Create/Update slot error:', err);
+      const errorMsg = err.response?.data?.error || `Failed to ${editingSlot ? 'update' : 'create'} slot`;
+      setNotification({ message: errorMsg, type: 'error', persistent: false });
+    } finally {
+      setIsSlotSubmitting(false);
+    }
+  };
+
+  const openDeleteSlotModal = (slot) => {
+    setSlotToDelete(slot);
+    setIsDeleteSlotModalOpen(true);
+  };
+
+  const closeDeleteSlotModal = () => {
+    setSlotToDelete(null);
+    setIsDeleteSlotModalOpen(false);
+  };
+
+  const handleDeleteSlot = async () => {
+    if (!slotToDelete) return;
+
+    try {
+      await axios.delete(`${API_BASE_URL}/admin/slots/${slotToDelete.id}`);
+      setNotification({ message: 'Slot deleted successfully', type: 'success', persistent: false });
+      
+      await fetchSlots();
+      await fetchUsers();
+      
+      if (currentSlotId === slotToDelete.id) {
+        const remainingSlots = slots.filter(s => s.id !== slotToDelete.id);
+        if (remainingSlots.length > 0) {
+          setCurrentSlotId(remainingSlots[0].id);
+        } else {
+          setCurrentSlotId(null);
+        }
+      }
+      
+      closeDeleteSlotModal();
+    } catch (err) {
+      console.error('Delete slot error:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to delete slot';
+      setNotification({ message: errorMsg, type: 'error', persistent: false });
+    }
+  };
 
   const openModal = (user=null) => {
     setEditingUser(user);
@@ -111,9 +242,8 @@ export default function ManageUsers() {
   const closeDeleteModal = () => setIsDeleteModalOpen(false);
 
   const openAssignExamModal = () => setIsAssignExamModalOpen(true);
-  const closeAssignExamModal = () => setIsAssignExamModalOpen(false);
+  const closeAssignExamModal = () => { setIsAssignExamModalOpen(false); setSelectedExamId(''); };
 
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -121,29 +251,28 @@ export default function ManageUsers() {
 
     try {
       if (editingUser) {
-        await axios.put(`/admin/users/${editingUser.id}`, formData, { withCredentials: true });
-        setNotification({ message: 'User updated successfully!', type:'success' });
+        await axios.put(`${API_BASE_URL}/admin/users/${editingUser.id}`, formData);
+        setNotification({ message: 'User updated successfully!', type:'success', persistent: false });
       } else {
-        
+        const currentSlot = slots.find(s => s.id === currentSlotId);
         const payload = {
           ...formData,
-          slotNumber: SLOT_NAMES.indexOf(currentSlot) + 1
+          slotNumber: currentSlot?.slotNumber
         };
-        await axios.post(`/auth/addCandidate`, payload, { withCredentials: true });
-        setNotification({ message: 'User added successfully!', type:'success' });
+        await axios.post(`${API_BASE_URL}/auth/addCandidate`, payload);
+        setNotification({ message: 'User added successfully!', type:'success', persistent: false });
       }
-      fetchUsers();
+      
+      await fetchUsers();
       closeModal();
     } catch(err){
       console.error('Error saving user:', err);
-      
       
       if (err.response) {
         const errorMessage = err.response.data?.message || err.response.data?.error;
         
         if (err.response.status === 400 || err.response.status === 409) {
-          
-          if (errorMessage && errorMessage.includes('already exists')) {
+          if (errorMessage && errorMessage.toLowerCase().includes('email')) {
             setFormError('This email is already registered. Please use a different email.');
           } else if (errorMessage) {
             setFormError(errorMessage);
@@ -151,7 +280,7 @@ export default function ManageUsers() {
             setFormError('Failed to save user. Please check your input.');
           }
         } else if (err.response.status === 500) {
-          setFormError(' This email is already registered. Please use a different email');
+          setFormError('Server error. This email may already be registered.');
         } else {
           setFormError('An unexpected error occurred. Please try again.');
         }
@@ -167,32 +296,61 @@ export default function ManageUsers() {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`/admin/users/${userToDelete.id}`, { withCredentials: true });
-      setNotification({ message: `User ${userToDelete.name} deleted.`, type:'success' });
-      fetchUsers();
+      await axios.delete(`${API_BASE_URL}/admin/users/${userToDelete.id}`);
+      setNotification({ message: `User ${userToDelete.name} deleted successfully.`, type:'success', persistent: false });
+      await fetchUsers();
       closeDeleteModal();
     } catch(err){ 
-      console.error(err);
-      setNotification({ message: 'Failed to delete user', type: 'error' });
+      console.error('Delete error:', err);
+      setNotification({ message: 'Failed to delete user', type: 'error', persistent: false });
     }
   };
 
   const handleAssignExam = async (examId) => {
     if (!examId || selectedUsers.length === 0) return;
+
+    const slotStartTime = buildSlotStartDateTime();
+
+    if (!slotStartTime) {
+      setNotification({
+        message: "Selected slot does not have valid date & time",
+        type: "error",
+        persistent: false
+      });
+      return;
+    }
+
     try {
       const payload = {
         examId: Number(examId),
-        userIds: selectedUsers.map(id => Number(id))
+        userIds: selectedUsers.map(id => Number(id)),
+        slotStartTime
       };
-      await axios.post(`/admin/users/assign-exam`, payload, { withCredentials: true });
-      setNotification({ message: `Exam assigned to ${selectedUsers.length} user(s).`, type:'success' });
+
+      await axios.post(`${API_BASE_URL}/admin/users/assign-exam`, payload);
+
+      setNotification({
+        message: "Exam assigned successfully! Students have 30-minute login window and 1 hour exam duration.",
+        type: "success",
+        persistent: false
+      });
+
       setSelectedUsers([]);
-      fetchUsers();
+      await fetchUsers();
       closeAssignExamModal();
-    } catch(err){
+
+    } catch (err) {
       console.error("Assign Exam Error:", err);
-      const errorMsg = err.response?.data?.message || 'Failed to assign exam';
-      setNotification({ message: errorMsg, type:'error' });
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Failed to assign exam";
+
+      setNotification({
+        message: errorMsg,
+        type: "error",
+        persistent: false
+      });
     }
   };
 
@@ -202,27 +360,29 @@ export default function ManageUsers() {
     }
     
     try {
-      await Promise.all(selectedUsers.map(id => axios.delete(`/admin/users/${id}`, { withCredentials: true })));
-      setNotification({ message: `${selectedUsers.length} user(s) deleted.`, type:'success' });
+      await Promise.all(selectedUsers.map(id => axios.delete(`${API_BASE_URL}/admin/users/${id}`)));
+      setNotification({ message: `${selectedUsers.length} user(s) deleted successfully.`, type:'success', persistent: false });
       setSelectedUsers([]);
-      fetchUsers();
+      await fetchUsers();
     } catch(err){ 
-      console.error(err);
-      setNotification({ message: 'Failed to delete some users', type: 'error' });
+      console.error('Bulk delete error:', err);
+      setNotification({ message: 'Failed to delete some users', type: 'error', persistent: false });
     }
   };
 
-  
   const requestSort = (key) => {
     let direction='ascending';
     if(sortConfig.key===key && sortConfig.direction==='ascending') direction='descending';
     setSortConfig({ key, direction });
   };
 
-  
   const sortedAndFilteredUsers = useMemo(() => {
-    const slotIndex = SLOT_NAMES.indexOf(currentSlot) + 1;
-    const usersInSlot = allUsers.filter(u => u.slotNumber === slotIndex);
+    if (!Array.isArray(allUsers)) return [];
+    
+    const currentSlot = slots.find(s => s.id === currentSlotId);
+    const usersInSlot = currentSlotId 
+      ? allUsers.filter(u => u.slotNumber === currentSlot?.slotNumber)
+      : allUsers;
 
     let filtered = usersInSlot.filter(u =>
       (u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -232,14 +392,15 @@ export default function ManageUsers() {
     );
 
     filtered.sort((a,b)=>{
-      if(a[sortConfig.key]<b[sortConfig.key]) return sortConfig.direction==='ascending'?-1:1;
-      if(a[sortConfig.key]>b[sortConfig.key]) return sortConfig.direction==='ascending'?1:-1;
+      const aVal = a[sortConfig.key] || '';
+      const bVal = b[sortConfig.key] || '';
+      if(aVal<bVal) return sortConfig.direction==='ascending'?-1:1;
+      if(aVal>bVal) return sortConfig.direction==='ascending'?1:-1;
       return 0;
     });
     return filtered;
-  }, [allUsers, currentSlot, searchTerm, statusFilter, sortConfig]);
+  }, [allUsers, currentSlotId, slots, searchTerm, statusFilter, sortConfig]);
 
-  // --- Pagination ---
   const totalPages = Math.ceil(sortedAndFilteredUsers.length / ITEMS_PER_PAGE);
   const paginatedUsers = useMemo(() => {
     const start=(currentPage-1)*ITEMS_PER_PAGE;
@@ -254,128 +415,353 @@ export default function ManageUsers() {
   };
   const areAllOnPageSelected = paginatedUsers.length>0 && paginatedUsers.every(u=>selectedUsers.includes(u.id));
 
-  const handleSlotChange = (slot) => {
-    setCurrentSlot(slot);
+  const handleSlotChange = (slotId) => {
+    setCurrentSlotId(slotId);
     setCurrentPage(1);
     setSelectedUsers([]);
     setSearchTerm('');
     setStatusFilter('All');
   };
 
-  useEffect(()=>{ if(currentPage>totalPages && totalPages>0) setCurrentPage(totalPages); },[currentPage,totalPages]);
+  useEffect(()=>{ 
+    if(currentPage>totalPages && totalPages>0) setCurrentPage(totalPages); 
+  },[currentPage,totalPages]);
 
-  
+  const currentSlot = slots.find(s => s.id === currentSlotId);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatTime = (timeString) => {
+    if (!timeString) return 'N/A';
+    return timeString.substring(0, 5);
+  };
+
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      <Notification message={notification.message} type={notification.type} onClose={()=>setNotification({message:'',type:''})}/>
-      <h2 className="text-4xl font-bold mb-6 text-gray-800">Manage Users (Slot: {currentSlot})</h2>
-
+      <Notification 
+        message={notification.message} 
+        type={notification.type} 
+        persistent={notification.persistent}
+        onClose={()=>setNotification({message:'',type:'', persistent: false})}
+      />
       
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6 overflow-x-auto whitespace-nowrap">
-        {SLOT_NAMES.map(slot => {
-          const slotIndex = SLOT_NAMES.indexOf(slot) + 1;
-          const count = allUsers.filter(u => u.slotNumber === slotIndex).length;
-          return (
-            <button
-              key={slot}
-              onClick={() => handleSlotChange(slot)}
-              className={`px-4 py-2 m-1 rounded-lg font-semibold transition-colors duration-200 ${
-                currentSlot === slot
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 text-gray-700 hover:bg-blue-100'
-              }`}
-            >
-              {slot} ({count})
-            </button>
-          );
-        })}
+      <div className="mb-6">
+        <h2 className="text-4xl font-bold text-gray-800">Manage Users</h2>
+        <p className="text-gray-600 mt-2">View, edit, and manage all registered users</p>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6 flex justify-between items-center">
-        <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="px-4 py-2 border rounded w-1/3"/>
-        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="px-4 py-2 border rounded">
+      {backendError && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+          <div className="flex items-start">
+            <svg className="w-6 h-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="text-red-800 font-semibold">Failed to load users</h3>
+              <p className="text-red-700 text-sm mt-1">Cannot connect to the backend server. Please ensure:</p>
+              <ul className="text-red-700 text-sm mt-2 ml-4 list-disc">
+                <li>The backend server is running and accessible</li>
+                <li>CORS is properly configured on the backend</li>
+                <li>The API endpoints are accessible (check console for URLs)</li>
+              </ul>
+              <button 
+                onClick={fetchUsers}
+                className="mt-3 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-semibold"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">Exam Slots</h3>
+          <button
+            onClick={addNewSlot}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Slot
+          </button>
+        </div>
+        
+        {slots.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p>No slots available. Create your first slot to get started.</p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {slots.map(slot => {
+              const count = Array.isArray(allUsers) ? allUsers.filter(u => u.slotNumber === slot.slotNumber).length : 0;
+              return (
+                <div
+                  key={slot.id}
+                  className={`relative group border-2 rounded-lg p-4 cursor-pointer transition-all duration-200 ${
+                    currentSlotId === slot.id
+                      ? 'border-blue-600 bg-blue-50 shadow-md'
+                      : 'border-gray-300 bg-white hover:border-blue-400 hover:shadow'
+                  }`}
+                  onClick={() => handleSlotChange(slot.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-bold text-lg">Slot {slot.slotNumber}</h4>
+                      {slot.collegeName && (
+                        <p className="text-sm text-gray-600 mt-1 font-medium">{slot.collegeName}</p>
+                      )}
+                      {slot.date && slot.time && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {formatDate(slot.date)}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-600">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {formatTime(slot.time)}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-2">
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                          currentSlotId === slot.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-700'
+                        }`}>
+                          {count} {count === 1 ? 'user' : 'users'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditSlotModal(slot);
+                        }}
+                        className="text-blue-600 hover:text-blue-800"
+                        title="Edit slot"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteSlotModal(slot);
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                        title="Delete slot"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white p-4 rounded-lg shadow-md mb-6 flex flex-wrap gap-4 items-center justify-between">
+        <input 
+          type="text" 
+          placeholder="Search by name, email, or college..." 
+          value={searchTerm} 
+          onChange={e=>setSearchTerm(e.target.value)} 
+          className="px-4 py-2 border rounded-lg flex-1 min-w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select 
+          value={statusFilter} 
+          onChange={e=>setStatusFilter(e.target.value)} 
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
           <option value="All">All Statuses</option>
           <option value="Active">Active</option>
           <option value="Blocked">Blocked</option>
           <option value="Completed Exam">Completed Exam</option>
           <option value="Assigned Exam">Assigned Exam</option>
         </select>
-        <div className="flex space-x-2">
-          {selectedUsers.length>0 && <>
-            <button onClick={handleBulkDelete} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">Delete Selected ({selectedUsers.length})</button>
-            <button onClick={openAssignExamModal} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">Assign Exam ({selectedUsers.length})</button>
-          </>}
-          <button onClick={()=>openModal()} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">Add User</button>
+        <div className="flex gap-2">
+          {selectedUsers.length>0 && (
+            <>
+              <button 
+                onClick={handleBulkDelete} 
+                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-semibold"
+              >
+                Delete ({selectedUsers.length})
+              </button>
+              <button 
+                onClick={openAssignExamModal} 
+                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition font-semibold"
+              >
+                Assign Exam ({selectedUsers.length})
+              </button>
+            </>
+          )}
+          <button 
+            onClick={()=>openModal()} 
+            disabled={!currentSlotId}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+            title={!currentSlotId ? "Please create a slot first" : ""}
+          >
+            + Add User
+          </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-xl overflow-x-auto">
-        <table className="min-w-full">
-          <thead className="bg-gray-200 text-gray-700 uppercase text-sm">
-            <tr>
-              <th className="py-3 px-4 text-left">
-                <input type="checkbox" onChange={handleSelectAllOnPage} checked={areAllOnPageSelected}/>
-              </th>
-              <th className="py-3 px-4 text-left">Sl No.</th>
-              <th className="py-3 px-4 text-left cursor-pointer" onClick={()=>requestSort('id')}>ID</th>
-              <th className="py-3 px-6 text-left cursor-pointer" onClick={()=>requestSort('name')}>Name</th>
-              <th className="py-3 px-6 text-left cursor-pointer" onClick={()=>requestSort('collegeName')}>College</th>
-              <th className="py-3 px-6 text-left cursor-pointer" onClick={()=>requestSort('email')}>Email</th>
-              <th className="py-3 px-6 text-left">Password</th>
-              <th className="py-3 px-6 text-left cursor-pointer" onClick={()=>requestSort('status')}>Status</th>
-              <th className="py-3 px-6 text-left">Assigned Exams</th>
-              <th className="py-3 px-6 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-700 text-sm">
-            {paginatedUsers.map(u => (
-              <tr key={u.id} className="border-b hover:bg-gray-100">
-                <td className="py-3 px-4">
-                  <input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={()=>handleSelectUser(u.id)}/>
-                </td>
-                <td className="py-3 px-4">
-                  {((currentPage - 1) * ITEMS_PER_PAGE) + paginatedUsers.indexOf(u) + 1}
-                </td>
-                <td className="py-3 px-4">{u.id}</td>
-                <td className="py-3 px-6">{u.name}</td>
-                <td className="py-3 px-6">{u.collegeName || 'N/A'}</td>
-                <td className="py-3 px-6">{u.email}</td>
-                <td className="py-3 px-6 font-mono">{u.password}</td>
-                <td className="py-3 px-6"><StatusBadge status={u.status}/></td>
-                <td className="py-3 px-6">
-                  {u.assignedExams?.length > 0
-                    ? u.assignedExams.map(ex => ex.title).join(', ')
-                    : 'None'}
-                </td>
-                <td className="py-3 px-6 text-center flex space-x-4 justify-center">
-                  <button onClick={()=>openModal(u)} className="text-blue-600 hover:text-blue-800">Edit</button>
-                  <button onClick={()=>openDeleteModal(u)} className="text-red-600 hover:text-red-800">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      
-      <div className="flex justify-between items-center mt-4">
-        <span className="text-sm text-gray-700">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
-        <div className="flex space-x-2">
-          <button onClick={()=>setCurrentPage(p=>Math.max(1,p-1))} disabled={currentPage===1} className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Previous</button>
-          <button onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))} disabled={currentPage===totalPages} className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Next</button>
+      {isLoading ? (
+        <div className="bg-white rounded-lg shadow-xl p-12 text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading users...</p>
         </div>
-      </div>
+      ) : sortedAndFilteredUsers.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-xl p-12 text-center">
+          <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <h3 className="mt-4 text-lg font-semibold text-gray-700">No users found</h3>
+          <p className="mt-2 text-gray-500">
+            {searchTerm || statusFilter !== 'All' 
+              ? 'Try adjusting your search or filters' 
+              : currentSlot ? `No users in Slot ${currentSlot.slotNumber} yet` : 'Please create a slot first'}
+          </p>
+          {!searchTerm && statusFilter === 'All' && currentSlotId && (
+            <button 
+              onClick={()=>openModal()} 
+              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Add First User
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="bg-white rounded-lg shadow-xl overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-200 text-gray-700 uppercase text-sm">
+                <tr>
+                  <th className="py-3 px-4 text-left">
+                    <input type="checkbox" onChange={handleSelectAllOnPage} checked={areAllOnPageSelected} className="cursor-pointer"/>
+                  </th>
+                  <th className="py-3 px-4 text-left">Sl No.</th>
+                  <th className="py-3 px-4 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('id')}>
+                    ID {sortConfig.key==='id' && (sortConfig.direction==='ascending'?'↑':'↓')}
+                  </th>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('name')}>
+                    Name {sortConfig.key==='name' && (sortConfig.direction==='ascending'?'↑':'↓')}
+                  </th>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('collegeName')}>
+                    College {sortConfig.key==='collegeName' && (sortConfig.direction==='ascending'?'↑':'↓')}
+                  </th>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('email')}>
+                    Email {sortConfig.key==='email' && (sortConfig.direction==='ascending'?'↑':'↓')}
+                  </th>
+                  <th className="py-3 px-6 text-left">Password</th>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('status')}>
+                    Status {sortConfig.key==='status' && (sortConfig.direction==='ascending'?'↑':'↓')}
+                  </th>
+                  <th className="py-3 px-6 text-left">Assigned Exams</th>
+                  <th className="py-3 px-6 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-700 text-sm">
+                {paginatedUsers.map((u, idx) => (
+                  <tr key={u.id} className="border-b hover:bg-gray-50 transition">
+                    <td className="py-3 px-4">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedUsers.includes(u.id)} 
+                        onChange={()=>handleSelectUser(u.id)}
+                        className="cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-3 px-4 font-medium">
+                      {((currentPage - 1) * ITEMS_PER_PAGE) + idx + 1}
+                    </td>
+                    <td className="py-3 px-4">{u.id}</td>
+                    <td className="py-3 px-6 font-semibold">{u.name}</td>
+                    <td className="py-3 px-6">{u.collegeName || 'N/A'}</td>
+                    <td className="py-3 px-6">{u.email}</td>
+                    <td className="py-3 px-6 font-mono text-xs">{u.password}</td>
+                    <td className="py-3 px-6"><StatusBadge status={u.status}/></td>
+                    <td className="py-3 px-6">
+                      {u.assignedExams?.length > 0
+                        ? u.assignedExams.map(ex => ex.title).join(', ')
+                        : <span className="text-gray-400 italic">None</span>}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      <div className="flex gap-3 justify-center">
+                        <button 
+                          onClick={()=>openModal(u)} 
+                          className="text-blue-600 hover:text-blue-800 font-semibold"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={()=>openDeleteModal(u)} 
+                          className="text-red-600 hover:text-red-800 font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      
+          <div className="flex justify-between items-center mt-4 bg-white p-4 rounded-lg shadow">
+            <span className="text-sm text-gray-700">
+              Showing <strong>{((currentPage-1)*ITEMS_PER_PAGE)+1}</strong> to <strong>{Math.min(currentPage*ITEMS_PER_PAGE, sortedAndFilteredUsers.length)}</strong> of <strong>{sortedAndFilteredUsers.length}</strong> users
+            </span>
+            <div className="flex gap-2">
+              <button 
+                onClick={()=>setCurrentPage(p=>Math.max(1,p-1))} 
+                disabled={currentPage===1} 
+                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition font-semibold"
+              >
+                Previous
+              </button>
+              <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button 
+                onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))} 
+                disabled={currentPage===totalPages} 
+                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition font-semibold"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg">
-            <h3 className="text-2xl font-bold mb-6">{editingUser?'Edit User':'Add User'}</h3>
+          <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold mb-6 text-gray-800">
+              {editingUser?'Edit User':'Add New User'}
+            </h3>
             
             {formError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded">
                 <div className="flex items-start">
-                  <svg className="w-5 h-5 text-red-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-red-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
                   <span className="text-red-800 text-sm">{formError}</span>
@@ -384,60 +770,82 @@ export default function ManageUsers() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input 
-                type="text" 
-                placeholder="Name" 
-                value={formData.name} 
-                onChange={e=>setFormData({...formData,name:e.target.value})} 
-                className="w-full p-2 border rounded" 
-                required
-              />
-              <input 
-                type="text" 
-                placeholder="College" 
-                value={formData.collegeName} 
-                onChange={e=>setFormData({...formData,collegeName:e.target.value})} 
-                className="w-full p-2 border rounded"
-              />
-              <input 
-                type="email" 
-                placeholder="Email" 
-                value={formData.email} 
-                onChange={e=>{
-                  setFormData({...formData,email:e.target.value});
-                  setFormError(''); 
-                }} 
-                className="w-full p-2 border rounded" 
-                required
-              />
-              <input 
-                type="text" 
-                placeholder={editingUser?"New Password (optional)":"Password"} 
-                value={formData.password} 
-                onChange={e=>setFormData({...formData,password:e.target.value})} 
-                className="w-full p-2 border rounded"
-              />
-              <select 
-                value={formData.status} 
-                onChange={e=>setFormData({...formData,status:e.target.value})} 
-                className="w-full p-2 border rounded"
-              >
-                <option value="Active">Active</option>
-                <option value="Blocked">Blocked</option>
-                <option value="Completed Exam">Completed Exam</option>
-              </select>
-              <div className="flex justify-end space-x-3 mt-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Name *</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter full name" 
+                  value={formData.name} 
+                  onChange={e=>setFormData({...formData,name:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">College Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter college name" 
+                  value={formData.collegeName} 
+                  onChange={e=>setFormData({...formData,collegeName:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
+                <input 
+                  type="email" 
+                  placeholder="Enter email address" 
+                  value={formData.email} 
+                  onChange={e=>{
+                    setFormData({...formData,email:e.target.value});
+                    setFormError(''); 
+                  }} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Password {editingUser && "(leave blank to keep current)"}
+                </label>
+                <input 
+                  type="text" 
+                  placeholder={editingUser?"New password (optional)":"Enter password"} 
+                  value={formData.password} 
+                  onChange={e=>setFormData({...formData,password:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Status *</label>
+                <select 
+                  value={formData.status} 
+                  onChange={e=>setFormData({...formData,status:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Blocked">Blocked</option>
+                  <option value="Completed Exam">Completed Exam</option>
+                </select>
+              </div>
+              
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button 
                   type="button" 
                   onClick={closeModal} 
-                  className="bg-gray-300 py-2 px-5 rounded-lg hover:bg-gray-400"
+                  className="bg-gray-200 py-2 px-6 rounded-lg hover:bg-gray-300 transition font-semibold"
                   disabled={isSubmitting}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="bg-blue-600 text-white py-2 px-5 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                  className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition font-semibold"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'Saving...' : (editingUser?'Save Changes':'Add User')}
@@ -448,44 +856,195 @@ export default function ManageUsers() {
         </div>
       )}
 
-    
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
-            <h3 className="text-2xl font-bold mb-4">Delete User</h3>
-            <p className="mb-6">Are you sure you want to delete <span className="font-semibold">{userToDelete?.name}</span>?</p>
-            <div className="flex justify-end space-x-3">
-              <button onClick={closeDeleteModal} className="bg-gray-300 py-2 px-5 rounded-lg hover:bg-gray-400">Cancel</button>
-              <button onClick={handleDelete} className="bg-red-600 text-white py-2 px-5 rounded-lg hover:bg-red-700">Delete</button>
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mx-auto mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold mb-2 text-center text-gray-800">Delete User</h3>
+            <p className="mb-6 text-center text-gray-600">
+              Are you sure you want to delete <span className="font-semibold text-gray-800">{userToDelete?.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button 
+                onClick={closeDeleteModal} 
+                className="bg-gray-200 py-2 px-6 rounded-lg hover:bg-gray-300 transition font-semibold"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDelete} 
+                className="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 transition font-semibold"
+              >
+                Delete User
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      
       {isAssignExamModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
-            <h3 className="text-2xl font-bold mb-4">Assign Exam</h3>
-            <p className="mb-4">Assigning to {selectedUsers.length} user(s).</p>
-            <select value={selectedExamId} onChange={e => setSelectedExamId(e.target.value)} className="w-full p-2 border rounded">
-              <option value="">-- Choose an exam --</option>
-              {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
-            </select>
-            <div className="flex justify-end mt-6 space-x-3">
-              <button onClick={closeAssignExamModal} className="bg-gray-300 py-2 px-5 rounded-lg hover:bg-gray-400">Cancel</button>
-              <button onClick={() => {
-                if (!selectedExamId) {
-                  setNotification({ message: "Please select an exam first", type: "error" });
-                  return;
-                }
-                handleAssignExam(selectedExamId);
-              }} className="bg-green-600 text-white py-2 px-5 rounded-lg hover:bg-green-700">Assign Exam</button>
+            <h3 className="text-2xl font-bold mb-4 text-gray-800">Assign Exam</h3>
+            <p className="mb-4 text-gray-600">
+              Assigning exam to <span className="font-semibold text-blue-600">{selectedUsers.length}</span> selected user(s)
+            </p>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Exam</label>
+              <select 
+                value={selectedExamId} 
+                onChange={e => setSelectedExamId(e.target.value)} 
+                className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Choose an exam --</option>
+                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <button 
+                onClick={closeAssignExamModal} 
+                className="bg-gray-200 py-2 px-6 rounded-lg hover:bg-gray-300 transition font-semibold"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (!selectedExamId) {
+                    setNotification({ message: "Please select an exam first", type: "error", persistent: false });
+                    return;
+                  }
+                  handleAssignExam(selectedExamId);
+                }} 
+                className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 transition font-semibold disabled:bg-green-400 disabled:cursor-not-allowed"
+                disabled={!selectedExamId}
+              >
+                Assign Exam
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {isSlotModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <h3 className="text-2xl font-bold mb-6 text-gray-800">
+              {editingSlot ? 'Edit Slot' : 'Create New Slot'}
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Slot Number *</label>
+                <input 
+                  type="number"
+                  placeholder="Enter slot number (e.g., 1, 2, 3...)"
+                  value={slotFormData.slotNumber} 
+                  onChange={e=>setSlotFormData({...slotFormData, slotNumber:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  min="0"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  College Name
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Enter college name (optional)"
+                  value={slotFormData.collegeName} 
+                  onChange={e=>setSlotFormData({...slotFormData, collegeName:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Select Date *
+                </label>
+                <input 
+                  type="date" 
+                  value={slotFormData.date} 
+                  onChange={e=>setSlotFormData({...slotFormData, date:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Select Time *
+                </label>
+                <input 
+                  type="time" 
+                  value={slotFormData.time} 
+                  onChange={e=>setSlotFormData({...slotFormData, time:e.target.value})} 
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <button 
+                onClick={()=>setIsSlotModalOpen(false)} 
+                className="bg-gray-200 py-2 px-6 rounded-lg hover:bg-gray-300 transition font-semibold"
+                disabled={isSlotSubmitting}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleCreateOrUpdateSlot} 
+                className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-blue-400 disabled:cursor-not-allowed"
+                disabled={isSlotSubmitting}
+              >
+                {isSlotSubmitting ? (editingSlot ? 'Updating...' : 'Creating...') : (editingSlot ? 'Update Slot' : 'Create Slot')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteSlotModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mx-auto mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold mb-2 text-center text-gray-800">Delete Slot</h3>
+            <p className="mb-6 text-center text-gray-600">
+              Are you sure you want to delete <span className="font-semibold text-gray-800">Slot {slotToDelete?.slotNumber}</span>? 
+              {slotToDelete && allUsers.filter(u => u.slotNumber === slotToDelete.slotNumber).length > 0 && (
+                <span className="block mt-2 text-red-600 font-semibold">
+                  Warning: This slot has {allUsers.filter(u => u.slotNumber === slotToDelete.slotNumber).length} user(s). 
+                  They will be removed from this slot.
+                </span>
+              )}
+            </p>
+            <div className="flex justify-center gap-3">
+              <button 
+                onClick={closeDeleteSlotModal} 
+                className="bg-gray-200 py-2 px-6 rounded-lg hover:bg-gray-300 transition font-semibold"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDeleteSlot} 
+                className="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 transition font-semibold"
+              >
+                Delete Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

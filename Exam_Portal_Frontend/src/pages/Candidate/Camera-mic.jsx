@@ -40,6 +40,7 @@ function ExamStart() {
         });
         if (res.data && res.data.userId) {
           setUserId(res.data.userId);
+          console.log("✅ User authenticated:", res.data.userId);
         }
       } catch (err) {
         console.error("❌ Failed to get user:", err);
@@ -52,11 +53,18 @@ function ExamStart() {
     }
   }, [userId]);
 
-  
+  // Validate required data
+  useEffect(() => {
+    if (!examId) {
+      console.error("❌ No exam ID provided");
+      setError("Invalid exam session. Please return to the exam list.");
+    }
+  }, [examId]);
 
   
   const requestCameraAndMic = async () => {
     try {
+      console.log("📷 Requesting camera and microphone access...");
       const camStream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
         audio: true,
@@ -65,8 +73,9 @@ function ExamStart() {
       setMicStream(camStream);
       setError("");
       setStep(2);
+      console.log("✅ Camera and microphone access granted");
     } catch (err) {
-      console.error("Error accessing camera/mic:", err);
+      console.error("❌ Camera/mic error:", err);
       setError("Camera and microphone access is required to proceed with the exam.");
     }
   };
@@ -74,15 +83,17 @@ function ExamStart() {
   
   const requestScreenShare = async () => {
     try {
+      console.log("🖥️ Requesting screen share...");
       const screenMediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: 1920, height: 1080 },
         audio: true,
       });
       setScreenStream(screenMediaStream);
       setError("");
+      console.log("✅ Screen share granted");
       return true;
     } catch (err) {
-      console.error("Screen share error:", err);
+      console.error("❌ Screen share error:", err);
       setError("Screen sharing is required for exam proctoring.");
       return false;
     }
@@ -103,14 +114,17 @@ function ExamStart() {
       recorder.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: "video/webm" });
+        console.log("✅ Recording stopped, blob size:", blob.size);
       };
 
       recorder.start(1000);
       setMediaRecorder(recorder);
       setRecordedChunks(chunks);
       setIsRecording(true);
+      console.log("✅ Recording started");
       return true;
     } catch (err) {
+      console.error("❌ Recording error:", err);
       setError("Unable to start recording session.");
       return false;
     }
@@ -120,26 +134,40 @@ function ExamStart() {
   const capturePhoto = () => {
     const video = verificationVideoRef.current;
     const canvas = verificationCanvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) {
+      console.error("❌ Video or canvas element not found");
+      return;
+    }
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    setCapturedPhoto(canvas.toDataURL("image/jpeg"));
+    const photoData = canvas.toDataURL("image/jpeg", 0.9);
+    setCapturedPhoto(photoData);
+    console.log("✅ Verification photo captured");
   };
 
   const captureIdProof = () => {
     const video = idVideoRef.current;
     const canvas = idCanvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) {
+      console.error("❌ Video or canvas element not found");
+      return;
+    }
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    setIdProofPhoto(canvas.toDataURL("image/jpeg"));
+    const photoData = canvas.toDataURL("image/jpeg", 0.9);
+    setIdProofPhoto(photoData);
+    console.log("✅ ID proof photo captured");
   };
 
-  const confirmPhoto = () => setStep(3);
+  const confirmPhoto = () => {
+    console.log("✅ Verification photo confirmed");
+    setStep(3);
+  };
 
   const retakePhoto = () => {
+    console.log("🔄 Retaking verification photo");
     setCapturedPhoto(null);
     if (verificationVideoRef.current && cameraStream) {
       verificationVideoRef.current.srcObject = cameraStream;
@@ -151,27 +179,33 @@ function ExamStart() {
     try {
       if (!capturedPhoto || !idProofPhoto) {
         setUploadStatus("Please capture both verification and ID proof photos.");
+        console.error("❌ Missing photos");
         return;
       }
 
       if (!userId || !examId) {
         setUploadStatus("Invalid user or exam credentials.");
-        console.error("Invalid IDs:", { userId, examId });
+        console.error("❌ Invalid credentials:", { userId, examId });
         return;
       }
 
+      console.log("🚀 Starting upload process...");
       const uploadSuccess = await uploadPhotosToDatabase(capturedPhoto, idProofPhoto, userId, examId);
 
       if (uploadSuccess) {
+        console.log("✅ Upload successful, proceeding to step 4");
         setStep(4);
+      } else {
+        console.error("❌ Upload failed");
       }
     } catch (err) {
-      console.error("Error confirming ID proof:", err);
+      console.error("❌ Error confirming ID proof:", err);
       setUploadStatus("Verification failed. Please try again.");
     }
   };
 
   const retakeIdProof = () => {
+    console.log("🔄 Retaking ID proof photo");
     setIdProofPhoto(null);
     setUploadStatus("");
     if (idVideoRef.current && cameraStream) {
@@ -186,13 +220,13 @@ function ExamStart() {
       return;
     }
 
+    console.log("🎯 Starting exam...");
     if (await startRecording()) {
       setIsExamStarted(true);
       
-      
       const quizSessionKey = `quiz_access_${userId}`;
       sessionStorage.setItem(quizSessionKey, 'true');
-      
+      console.log("✅ Quiz session key set");
       
       setTimeout(() => {
         navigate("/quiz");
@@ -205,39 +239,80 @@ function ExamStart() {
     try {
       setIsUploading(true);
       setUploadStatus("Uploading verification documents...");
+      
+      console.log("========================================");
+      console.log("📤 UPLOAD STARTING");
+      console.log("User ID:", userId);
+      console.log("Exam ID:", examId);
+      console.log("========================================");
 
+      // Convert base64 to Blob
       const verificationBlob = await fetch(verificationPhoto).then((r) => r.blob());
       const idBlob = await fetch(idPhoto).then((r) => r.blob());
+      
+      console.log("✅ Photos converted to blobs");
+      console.log("Verification blob size:", verificationBlob.size);
+      console.log("ID proof blob size:", idBlob.size);
 
+      // Create FormData
       const formData = new FormData();
       formData.append("photo", verificationBlob, "verification.jpg");
       formData.append("idProof", idBlob, "id_proof.jpg");
+      formData.append("userId", userId.toString());
+      formData.append("examId", examId.toString());
       formData.append("cameraEnabled", "true");
       formData.append("microphoneEnabled", "true");
       formData.append("screenSharingEnabled", screenStream ? "true" : "false");
-      formData.append("userId", userId.toString());
-      formData.append("examId", examId.toString());
 
-      const response = await fetch("/api/proctoring/save", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error("Upload failed: " + errText);
+      console.log("✅ FormData prepared");
+      
+      // Log FormData contents
+      for (let [key, value] of formData.entries()) {
+        if (value instanceof Blob) {
+          console.log(`FormData[${key}]:`, value.type, value.size, "bytes");
+        } else {
+          console.log(`FormData[${key}]:`, value);
+        }
       }
 
-      const result = await response.json();
+      console.log("📡 Sending POST request to /api/proctoring/save");
 
-      setUploadStatus("Verification completed successfully");
-      setIsUploading(false);
-      return true;
+      // Use axios for upload
+      const response = await axios.post("/proctoring/save", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        withCredentials: true,
+      });
+
+      console.log("✅ Upload response received:", response.data);
+
+      if (response.data && response.data.success) {
+        setUploadStatus("Verification completed successfully");
+        setIsUploading(false);
+        return true;
+      } else {
+        throw new Error(response.data?.error || "Upload failed");
+      }
 
     } catch (err) {
-      console.error("Upload error:", err);
-      setUploadStatus("Upload failed: " + err.message);
+      console.error("========================================");
+      console.error("❌ UPLOAD ERROR");
+      console.error("========================================");
+      console.error("Error:", err);
+      console.error("Error message:", err.message);
+      console.error("Response data:", err.response?.data);
+      console.error("Response status:", err.response?.status);
+      console.error("========================================");
+      
+      let errorMessage = "Upload failed";
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setUploadStatus(errorMessage);
       setIsUploading(false);
       return false;
     }
@@ -259,9 +334,18 @@ function ExamStart() {
 
   useEffect(() => {
     return () => {
-      if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
-      if (screenStream) screenStream.getTracks().forEach((t) => t.stop());
-      if (isRecording && mediaRecorder) mediaRecorder.stop();
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        console.log("🛑 Camera stream stopped");
+      }
+      if (screenStream) {
+        screenStream.getTracks().forEach((t) => t.stop());
+        console.log("🛑 Screen stream stopped");
+      }
+      if (isRecording && mediaRecorder) {
+        mediaRecorder.stop();
+        console.log("🛑 Recording stopped");
+      }
     };
   }, [cameraStream, screenStream, isRecording, mediaRecorder]);
 
@@ -450,31 +534,31 @@ function ExamStart() {
           
           {uploadStatus && (
             <div className={`mb-6 p-4 rounded-xl flex items-start ${
-              uploadStatus.includes("successfully")
+              uploadStatus.includes("successfully") || uploadStatus.includes("completed")
                 ? "bg-green-50 border border-green-200"
-                : uploadStatus.includes("failed")
+                : uploadStatus.includes("failed") || uploadStatus.includes("Invalid")
                   ? "bg-red-50 border border-red-200"
                   : "bg-blue-50 border border-blue-200"
             }`}>
               <svg className={`w-5 h-5 mr-3 flex-shrink-0 mt-0.5 ${
-                uploadStatus.includes("successfully")
+                uploadStatus.includes("successfully") || uploadStatus.includes("completed")
                   ? "text-green-600"
-                  : uploadStatus.includes("failed")
+                  : uploadStatus.includes("failed") || uploadStatus.includes("Invalid")
                     ? "text-red-600"
                     : "text-blue-600"
               }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {uploadStatus.includes("successfully") ? (
+                {uploadStatus.includes("successfully") || uploadStatus.includes("completed") ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                ) : uploadStatus.includes("failed") ? (
+                ) : uploadStatus.includes("failed") || uploadStatus.includes("Invalid") ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 ) : (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 )}
               </svg>
               <p className={`text-sm font-medium ${
-                uploadStatus.includes("successfully")
+                uploadStatus.includes("successfully") || uploadStatus.includes("completed")
                   ? "text-green-800"
-                  : uploadStatus.includes("failed")
+                  : uploadStatus.includes("failed") || uploadStatus.includes("Invalid")
                     ? "text-red-800"
                     : "text-blue-800"
               }`}>
@@ -553,12 +637,6 @@ function ExamStart() {
         </div>
       </div>
 
-      {uploadStatus && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <p className="text-sm text-blue-800 font-medium">{uploadStatus}</p>
-        </div>
-      )}
-
       <button
         onClick={startExam}
         className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center"
@@ -601,4 +679,4 @@ function ExamStart() {
   );
 }
 
-export default ExamStart
+export default ExamStart;

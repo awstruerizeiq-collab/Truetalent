@@ -36,7 +36,7 @@ function Navbar() {
     textShadow: 'none', 
   }}
 >
-  Truerize Exam Portal
+Truerize Talent Portal
 </div>
       </div>
     <div>

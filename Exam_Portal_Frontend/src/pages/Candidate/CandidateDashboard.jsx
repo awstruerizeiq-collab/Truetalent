@@ -13,7 +13,7 @@ function CandidateNavbar() {
           className="h-16 w-16 object-contain"
         />
         <div className="text-3xl font-bold text-blue-900 tracking-wide">
-          Truerize Exam Portal
+          Truerize Talent Portal
         </div>
       </div>
       <div className="flex items-center space-x-4">
@@ -224,7 +224,7 @@ function CandidateExamPortal() {
         
         <div className="text-center mb-14 mt-6">
           <h1 className="text-4xl font-bold text-gray-800 mb-3">
-            Welcome to Truerize Assessment Portal
+            Welcome to Talent Truerize Portal
           </h1>
           <p className="text-lg text-gray-600">
             Please review the exam details and instructions carefully before proceeding

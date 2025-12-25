@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Clock, User, BookOpen, AlertCircle, ChevronLeft, ChevronRight, Video, VideoOff } from "lucide-react";
+import { Clock, User, BookOpen, AlertCircle, ChevronLeft, ChevronRight, Video, VideoOff, AlertTriangle, CheckCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axiosConfig";
 import truerizeLogo from "../../assets/images/Truerize_Logo.png";
@@ -34,7 +34,11 @@ const QuizInterface = () => {
   const [backButtonCount, setBackButtonCount] = useState(0);
   const MAX_BACK_ATTEMPTS = 1;
 
-  // ✅ Camera state - NO RECORDING
+  // ✅ NEW: Submit confirmation modal state
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Camera state
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const videoRef = useRef(null);
@@ -66,7 +70,7 @@ const QuizInterface = () => {
           if (!isAutoSubmittingRef.current) {
             alert("⚠️ Second back button attempt detected!\n\n🔴 Your exam will be submitted automatically now.");
             setTimeout(() => {
-              handleSubmitExam();
+              performExamSubmission();
             }, 1000);
           }
         } else {
@@ -197,14 +201,14 @@ const QuizInterface = () => {
     }
   }, [answers, timeLeft, currentQuestionIndex, tabSwitchCount, backButtonCount]);
 
-  // ✅ START CAMERA - NO RECORDING (Just Display)
+  // Start camera
   const startCamera = async () => {
     try {
       console.log("🎥 Starting camera for proctoring visibility...");
       
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
-        audio: false // No audio needed since we're not recording
+        audio: false
       });
 
       streamRef.current = stream;
@@ -225,7 +229,7 @@ const QuizInterface = () => {
     }
   };
 
-  // ✅ STOP CAMERA - No Recording to Stop
+  // Stop camera
   const stopCamera = () => {
     console.log("🛑 Stopping camera...");
     
@@ -319,14 +323,15 @@ const QuizInterface = () => {
     }
   };
 
-  // ✅ HANDLE SUBMIT EXAM - NO VIDEO UPLOAD
-  const handleSubmitExam = async () => {
+  // ✅ NEW: Actual exam submission logic (called after confirmation)
+  const performExamSubmission = async () => {
     if (!examData || isSubmitted || !studentId || isAutoSubmittingRef.current) {
       return;
     }
 
     isAutoSubmittingRef.current = true;
     setIsSubmitted(true);
+    setIsSubmitting(true);
 
     try {
       console.log("📝 Submitting exam...");
@@ -344,12 +349,11 @@ const QuizInterface = () => {
         }
       });
 
-      // ✅ Submit WITHOUT video URL
       const payload = {
         user: { id: Number(studentId) },
         exam: { id: Number(liveExamId) },
         answersJson: JSON.stringify(payloadAnswers),
-        videoUrl: null // ✅ No video URL
+        videoUrl: null
       };
 
       console.log("📤 Submitting payload (no video):", payload);
@@ -371,6 +375,7 @@ const QuizInterface = () => {
       sessionStorage.removeItem(quizAccessKey);
 
       setShowSuccessScreen(true);
+      setShowSubmitModal(false);
 
       await clearUserSession();
       clearAllBrowserStorage();
@@ -385,8 +390,28 @@ const QuizInterface = () => {
       console.error("❌ EXAM SUBMISSION FAILED:", err);
       alert("❌ Failed to submit exam. Please contact support.");
       setIsSubmitted(false);
+      setIsSubmitting(false);
+      setShowSubmitModal(false);
       isAutoSubmittingRef.current = false;
     }
+  };
+
+  // ✅ NEW: Handle submit button click - show modal first
+  const handleSubmitExam = () => {
+    if (isSubmitted || !examData || !studentId) {
+      return;
+    }
+    setShowSubmitModal(true);
+  };
+
+  // ✅ NEW: Confirm submission from modal
+  const confirmSubmission = () => {
+    performExamSubmission();
+  };
+
+  // ✅ NEW: Cancel submission
+  const cancelSubmission = () => {
+    setShowSubmitModal(false);
   };
 
   // Tab switching detection
@@ -401,7 +426,7 @@ const QuizInterface = () => {
           if (newCount > MAX_TAB_SWITCHES) {
             setTimeout(() => {
               if (!isAutoSubmittingRef.current) {
-                handleSubmitExam();
+                performExamSubmission();
               }
             }, 500);
           } else {
@@ -525,7 +550,7 @@ const QuizInterface = () => {
         }
 
         setExamData({
-          title: `Exam ID ${liveExamId}`,
+          title: ``,
           duration: 60,
           studentName: userName,
           studentId: studentId || "CD001",
@@ -542,7 +567,6 @@ const QuizInterface = () => {
         setLoading(false);
         loadSavedData();
         
-        // ✅ Start camera (display only)
         startCamera();
 
       } catch (err) {
@@ -567,7 +591,7 @@ const QuizInterface = () => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          handleSubmitExam();
+          performExamSubmission();
           return 0;
         }
         return prev - 1;
@@ -587,6 +611,7 @@ const QuizInterface = () => {
   const currentSection = sectionMap.find(s => s.id === currentQ?.section);
   const totalQuestions = questions.length;
   const answeredCount = Object.keys(answers).length;
+  const unansweredCount = totalQuestions - answeredCount;
 
   const handleAnswerChange = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -685,11 +710,17 @@ const QuizInterface = () => {
                 className="h-32 w-auto object-contain"
               />
             </div>
+            <div className="flex justify-center mb-6">
+              <CheckCircle className="w-20 h-20 text-green-500" />
+            </div>
             <h1 className="text-4xl font-bold mb-4 text-gray-900">
-              Thank You for submitting your Exam!
+              Thank You for Submitting Your Exam!
             </h1>
             <p className="text-gray-600 text-lg">
-              You may now close the window.
+              Your responses have been recorded successfully.
+            </p>
+            <p className="text-gray-500 text-sm mt-4">
+              You may now close this window.
             </p>
           </div>
         </div>
@@ -726,6 +757,60 @@ const QuizInterface = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
+      {/* ✅ NEW: Submit Confirmation Modal */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-fade-in">
+            <div className="bg-gradient-to-r from-orange-500 to-red-500 p-6">
+              <div className="flex items-center justify-center">
+                <AlertTriangle className="w-12 h-12 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white text-center mt-4">
+                Confirm Exam Submission
+              </h2>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-gray-700 text-center mb-4">
+                  Are you sure you want to submit your exam?
+                </p>
+                
+                <div className="mt-4 bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                  <p className="text-red-800 text-sm font-semibold">
+                    ⚠️ Once submitted, you cannot make any changes to your answers.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelSubmission}
+                  disabled={isSubmitting}
+                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSubmission}
+                  disabled={isSubmitting}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Submitting...
+                    </>
+                  ) : (
+                    'Yes, Submit Exam'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSidebar && (
         <div className="w-80 bg-slate-900 shadow-xl flex flex-col sticky top-0 h-screen text-white">
           <div className="p-6 border-b border-gray-700">
@@ -742,7 +827,7 @@ const QuizInterface = () => {
             </div>
           </div>
 
-          {/* ✅ Camera Display (No Recording) */}
+          {/* Camera Display */}
           <div className="p-4 border-b border-gray-700">
             <div className="relative bg-black rounded-lg overflow-hidden">
               <video 
@@ -791,137 +876,153 @@ const QuizInterface = () => {
                         <button
                           key={q.id}
                           onClick={() => handleQuestionJump(qIndex)}
-                          className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${status === "current" ? "bg-blue-600 text-white shadow-lg border-2 border-blue-300"
-                              : status === "answered" ? "bg-green-600 text-white"
-                                : "bg-gray-600 text-gray-300 hover:bg-gray-500"}`}
->
-{index + 1}
-</button>
-);
-})}
-</div>
-</div>
-);
-})}
-</div>
-<div className="p-6 border-t border-gray-700">
-        <button
-          onClick={handleSubmitExam}
-          disabled={isSubmitted}
-          className={`w-full font-medium py-3 px-4 rounded-lg transition-colors shadow-lg ${isSubmitted ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'
-            }`}
-        >
-          {isSubmitted ? 'Submitting...' : 'Submit Exam'}
-        </button>
-      </div>
-    </div>
-  )}
-
-  <div className="flex-1 flex flex-col">
-    <header className="bg-white shadow-md border-b border-gray-300 p-4 sticky top-0 z-40">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <button onClick={() => setShowSidebar(!showSidebar)} className="mr-4 p-2 hover:bg-gray-100 rounded-lg text-gray-700 transition-colors">
-            {showSidebar ? <ChevronLeft className="w-6 h-6" /> : <ChevronRight className="w-6 h-6" />}
-          </button>
-          <span className="text-lg font-medium text-gray-600">
-            Section: <span className="font-semibold text-blue-600">{currentSection?.name}</span> |
-            Question: <span className="font-semibold text-blue-600">{displaySectionQuestionNumber}</span>
-          </span>
-        </div>
-        <div className="flex items-center space-x-6">
-          <div className="flex items-center">
-            <Clock className="w-5 h-5 text-red-500 mr-2" />
-            <span className="font-medium text-gray-600 mr-2">Time Left:</span>
-            <span className={`font-mono text-xl font-bold ${timeLeft < 300 ? "text-red-500 animate-pulse" : "text-gray-800"}`}>
-              {formatTime(timeLeft)}
-            </span>
+                          className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                            status === "current" 
+                              ? "bg-blue-600 text-white shadow-lg border-2 border-blue-300"
+                              : status === "answered" 
+                                ? "bg-green-600 text-white"
+                                : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                          }`}
+                        >
+                          {index + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-            Question {displaySectionQuestionNumber} of {sectionQuestions.length}
+
+          <div className="p-6 border-t border-gray-700">
+            <button
+              onClick={handleSubmitExam}
+              disabled={isSubmitted}
+              className={`w-full font-medium py-3 px-4 rounded-lg transition-colors shadow-lg ${
+                isSubmitted 
+                  ? 'bg-gray-600 cursor-not-allowed' 
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }`}
+            >
+              {isSubmitted ? 'Submitting...' : 'Submit Exam'}
+            </button>
           </div>
         </div>
-      </div>
-    </header>
+      )}
 
-    <main className="flex-1 p-8 bg-gray-50 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-          <div className="mb-8">
-            <div className="flex items-start justify-between mb-4">
-              <p className="text-lg font-semibold text-gray-800 flex-1">
-                Q{displaySectionQuestionNumber}. {currentQ.questionText}
-              </p>
-              <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold ml-4">
-                {currentQ.marks} {currentQ.marks > 1 ? 'Marks' : 'Mark'}
+      <div className="flex-1 flex flex-col">
+        <header className="bg-white shadow-md border-b border-gray-300 p-4 sticky top-0 z-40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <button 
+                onClick={() => setShowSidebar(!showSidebar)} 
+                className="mr-4 p-2 hover:bg-gray-100 rounded-lg text-gray-700 transition-colors"
+              >
+                {showSidebar ? <ChevronLeft className="w-6 h-6" /> : <ChevronRight className="w-6 h-6" />}
+              </button>
+              <span className="text-lg font-medium text-gray-600">
+                Section: <span className="font-semibold text-blue-600">{currentSection?.name}</span> |
+                Question: <span className="font-semibold text-blue-600">{displaySectionQuestionNumber}</span>
               </span>
             </div>
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center">
+                <Clock className="w-5 h-5 text-red-500 mr-2" />
+                <span className="font-medium text-gray-600 mr-2">Time Left:</span>
+                <span className={`font-mono text-xl font-bold ${
+                  timeLeft < 300 ? "text-red-500 animate-pulse" : "text-gray-800"
+                }`}>
+                  {formatTime(timeLeft)}
+                </span>
+              </div>
+              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                Question {displaySectionQuestionNumber} of {sectionQuestions.length}
+              </div>
+            </div>
           </div>
+        </header>
 
-          {currentQ.type === "mcq" && currentQ.options && currentQ.options.length > 0 && (
-            <div className="space-y-3 mb-8">
-              {currentQ.options.map((option, index) => {
-                const optionValue = String.fromCharCode(65 + index);
-                const isSelected = answers[currentQ.id] === optionValue;
-                return (
-                  <label
-                    key={index}
-                    className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${isSelected
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-                      }`}
+        <main className="flex-1 p-8 bg-gray-50 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
+              <div className="mb-8">
+                <div className="flex items-start justify-between mb-4">
+                  <p className="text-lg font-semibold text-gray-800 flex-1">
+                    Q{displaySectionQuestionNumber}. {currentQ.questionText}
+                  </p>
+                  <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold ml-4">
+                    {currentQ.marks} {currentQ.marks > 1 ? 'Marks' : 'Mark'}
+                  </span>
+                </div>
+              </div>
+
+              {currentQ.type === "mcq" && currentQ.options && currentQ.options.length > 0 && (
+                <div className="space-y-3 mb-8">
+                  {currentQ.options.map((option, index) => {
+                    const optionValue = String.fromCharCode(65 + index);
+                    const isSelected = answers[currentQ.id] === optionValue;
+                    return (
+                      <label
+                        key={index}
+                        className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`question-${currentQ.id}`}
+                          value={optionValue}
+                          checked={isSelected}
+                          onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                          className="w-5 h-5 text-blue-600 mr-3"
+                        />
+                        <span className="font-semibold mr-3 text-gray-700">{optionValue}.</span>
+                        <span className="text-gray-800 select-none">{option}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-6 border-t border-gray-300 mt-8">
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handlePrevious}
+                    disabled={currentQuestionIndex === 0}
+                    className={`px-6 py-2 border border-gray-400 text-gray-700 rounded-lg transition-colors ${
+                      currentQuestionIndex === 0
+                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                    }`}
                   >
-                    <input
-                      type="radio"
-                      name={`question-${currentQ.id}`}
-                      value={optionValue}
-                      checked={isSelected}
-                      onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                      className="w-5 h-5 text-blue-600 mr-3"
-                    />
-                    <span className="font-semibold mr-3 text-gray-700">{optionValue}.</span>
-                    <span className="text-gray-800 select-none">{option}</span>
-                  </label>
-                );
-              })}
+                    Previous
+                  </button>
+
+                  <button
+                    onClick={clearResponse}
+                    className="px-6 py-2 bg-gray-100 border border-gray-400 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Clear Response
+                  </button>
+                </div>
+
+                {!isLastQuestionOverall && (
+                  <button
+                    onClick={handleNext}
+                    className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                  >
+                    Next
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-
-          <div className="flex items-center justify-between pt-6 border-t border-gray-300 mt-8">
-            <div className="flex space-x-3">
-              <button
-                onClick={handlePrevious}
-                disabled={currentQuestionIndex === 0}
-                className={`px-6 py-2 border border-gray-400 text-gray-700 rounded-lg transition-colors ${currentQuestionIndex === 0
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-800"
-                  }`}
-              >
-                Previous
-              </button>
-
-              <button
-                onClick={clearResponse}
-                className="px-6 py-2 bg-gray-100 border border-gray-400 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Clear Response
-              </button>
-            </div>
-
-            {!isLastQuestionOverall && (
-              <button
-                onClick={handleNext}
-                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-              >
-                Next
-              </button>
-            )}
           </div>
-        </div>
+        </main>
       </div>
-    </main>
-  </div>
-</div>
-);
+    </div>
+  );
 };
-export default QuizInterface;
+
+export default QuizInterface; 

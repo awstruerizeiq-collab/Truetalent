@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "../../api/axiosConfig";
-import Sidebar from "../../components/Sidebar";
+import axios from "axios";
 
 export default function ManageExams() {
   const [exams, setExams] = useState([]);
@@ -10,36 +9,59 @@ export default function ManageExams() {
   const [editingExam, setEditingExam] = useState(null);
   const [examToDelete, setExamToDelete] = useState(null);
   const [notification, setNotification] = useState({ message: "", type: "" });
+  const [loading, setLoading] = useState(false);
 
-  const API_URL = "/admin/exams";
-
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
+  const API_URL = `${API_BASE_URL}/admin/exams`;
  
   const fetchExams = async () => {
+    setLoading(true);
     try {
-      const res = await axios.get(API_URL, { withCredentials: true });
-      setExams(res.data);
+      console.log("🔍 Fetching exams from:", API_URL);
+      const res = await axios.get(API_URL, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("✅ Exams fetched:", res.data);
+      
+      const examData = Array.isArray(res.data) ? res.data : res.data.exams || [];
+      setExams(examData);
+      
+      if (examData.length === 0) {
+        setNotification({ 
+          message: "No exams found. Create your first exam!", 
+          type: "info" 
+        });
+      }
     } catch (error) {
-      console.error("Error fetching exams:", error);
+      console.error("❌ Error fetching exams:", error);
+      const errorMsg = error.response?.data?.message || 
+                       error.response?.data?.error || 
+                       "Failed to fetch exams. Please check if the server is running.";
+      setNotification({ message: errorMsg, type: "error" });
+    } finally {
+      setLoading(false);
     }
   };
+
   useEffect(() => {
     window.history.pushState(null, "", window.location.href);
     
     const handlePopState = (event) => {
       window.history.pushState(null, "", window.location.href);
-      alert("⚠️ Please use the navigation menu to switch pages.");
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-  
 
   useEffect(() => {
     fetchExams();
   }, []);
 
-  
   useEffect(() => {
     if (editingExam) {
       setFormData({ title: editingExam.title, duration: editingExam.duration });
@@ -48,7 +70,16 @@ export default function ManageExams() {
     }
   }, [editingExam]);
 
- 
+  
+  useEffect(() => {
+    if (notification.message) {
+      const timer = setTimeout(() => {
+        setNotification({ message: "", type: "" });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
   const handleOpenModal = (exam = null) => {
     setEditingExam(exam);
     setIsModalOpen(true);
@@ -56,6 +87,7 @@ export default function ManageExams() {
 
   const handleCloseModal = () => {
     setEditingExam(null);
+    setFormData({ title: "", duration: "" });
     setIsModalOpen(false);
   };
 
@@ -69,35 +101,81 @@ export default function ManageExams() {
     setIsDeleteModalOpen(false);
   };
 
- 
   const handleSaveExam = async () => {
-    const payload = { title: formData.title, duration: Number(formData.duration) };
+    
+    if (!formData.title.trim()) {
+      setNotification({ message: "Title is required!", type: "error" });
+      return;
+    }
+    
+    if (!formData.duration || formData.duration <= 0) {
+      setNotification({ message: "Duration must be greater than 0!", type: "error" });
+      return;
+    }
+
+    const payload = { 
+      title: formData.title.trim(), 
+      duration: Number(formData.duration),
+      status: "Active"
+    };
+
+    setLoading(true);
     try {
+      console.log("💾 Saving exam:", payload);
+      
       if (editingExam) {
-        await axios.put(`${API_URL}/${editingExam.id}`, payload, { withCredentials: true });
+        const response = await axios.put(`${API_URL}/${editingExam.id}`, payload, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log("✅ Update response:", response.data);
         setNotification({ message: "Exam updated successfully!", type: "success" });
       } else {
-        await axios.post(API_URL, payload, { withCredentials: true });
+        const response = await axios.post(API_URL, payload, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log("✅ Create response:", response.data);
         setNotification({ message: "Exam added successfully!", type: "success" });
       }
-      fetchExams();
+      
+      await fetchExams();
       handleCloseModal();
     } catch (error) {
-      console.error("Error saving exam:", error);
-      setNotification({ message: "Error saving exam!", type: "error" });
+      console.error("❌ Error saving exam:", error);
+      const errorMsg = error.response?.data?.message || 
+                       error.response?.data?.error || 
+                       "Error saving exam!";
+      setNotification({ message: errorMsg, type: "error" });
+    } finally {
+      setLoading(false);
     }
   };
 
- 
   const handleDelete = async () => {
+    setLoading(true);
     try {
-      await axios.delete(`${API_URL}/${examToDelete.id}`, { withCredentials: true });
-      fetchExams();
+      console.log("🗑️ Deleting exam:", examToDelete.id);
+      await axios.delete(`${API_URL}/${examToDelete.id}`, {
+        withCredentials: true
+      });
+      console.log("✅ Exam deleted");
+      
+      await fetchExams();
       handleCloseDeleteModal();
       setNotification({ message: "Exam deleted successfully!", type: "success" });
     } catch (error) {
-      console.error("Error deleting exam:", error);
-      setNotification({ message: "Error deleting exam!", type: "error" });
+      console.error("❌ Error deleting exam:", error);
+      const errorMsg = error.response?.data?.message || 
+                       error.response?.data?.error || 
+                       "Error deleting exam!";
+      setNotification({ message: errorMsg, type: "error" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -108,7 +186,11 @@ export default function ManageExams() {
       {notification.message && (
         <div
           className={`mb-4 p-4 rounded-lg ${
-            notification.type === "success" ? "bg-green-200 text-green-800" : "bg-red-200 text-red-800"
+            notification.type === "success" 
+              ? "bg-green-200 text-green-800" 
+              : notification.type === "info"
+              ? "bg-blue-200 text-blue-800"
+              : "bg-red-200 text-red-800"
           }`}
         >
           {notification.message}
@@ -119,56 +201,80 @@ export default function ManageExams() {
         <h3 className="text-xl font-semibold text-gray-700">Exam List</h3>
         <button
           onClick={() => handleOpenModal()}
-          className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition-colors duration-200"
+          className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition-colors duration-200 disabled:bg-blue-300"
+          disabled={loading}
         >
-          Add Exam
+          {loading ? "Loading..." : "Add Exam"}
         </button>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border-collapse rounded-lg overflow-hidden">
-            <thead>
-              <tr className="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
-                <th className="py-3 px-6 text-left">ID</th>
-                <th className="py-3 px-6 text-left">Title</th>
-                <th className="py-3 px-6 text-left">Duration (min)</th>
-                <th className="py-3 px-6 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700 text-sm font-light">
-              {exams.map((exam) => (
-                <tr
-                  key={exam.id}
-                  className="border-b border-gray-200 hover:bg-gray-100 transition-colors duration-200"
-                >
-                  <td className="py-3 px-6 text-left whitespace-nowrap">{exam.id}</td>
-                  <td className="py-3 px-6 text-left">{exam.title}</td>
-                  <td className="py-3 px-6 text-left">{exam.duration}</td>
-                  <td className="py-3 px-6 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <button
-                        onClick={() => handleOpenModal(exam)}
-                        className="text-blue-600 hover:text-blue-800 transition-colors duration-200 font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleOpenDeleteModal(exam)}
-                        className="text-red-600 hover:text-red-800 transition-colors duration-200 font-medium"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        {loading && exams.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-2 text-gray-600">Loading exams...</p>
+          </div>
+        ) : exams.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-lg">No exams found</p>
+            <p className="text-sm mt-2">Click "Add Exam" to create your first exam</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border-collapse rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
+                  <th className="py-3 px-6 text-left">ID</th>
+                  <th className="py-3 px-6 text-left">Title</th>
+                  <th className="py-3 px-6 text-left">Duration (min)</th>
+                  <th className="py-3 px-6 text-left">Status</th>
+                  <th className="py-3 px-6 text-center">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="text-gray-700 text-sm font-light">
+                {exams.map((exam) => (
+                  <tr
+                    key={exam.id}
+                    className="border-b border-gray-200 hover:bg-gray-100 transition-colors duration-200"
+                  >
+                    <td className="py-3 px-6 text-left whitespace-nowrap">{exam.id}</td>
+                    <td className="py-3 px-6 text-left">{exam.title}</td>
+                    <td className="py-3 px-6 text-left">{exam.duration}</td>
+                    <td className="py-3 px-6 text-left">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        exam.status === 'Active' 
+                          ? 'bg-green-200 text-green-800' 
+                          : 'bg-gray-200 text-gray-800'
+                      }`}>
+                        {exam.status || 'Active'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <button
+                          onClick={() => handleOpenModal(exam)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200 font-medium disabled:text-blue-300"
+                          disabled={loading}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleOpenDeleteModal(exam)}
+                          className="text-red-600 hover:text-red-800 transition-colors duration-200 font-medium disabled:text-red-300"
+                          disabled={loading}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-     
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg transform transition-all duration-300 scale-100">
@@ -178,7 +284,7 @@ export default function ManageExams() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="title" className="block text-gray-700 font-medium mb-1">
-                  Title
+                  Title *
                 </label>
                 <input
                   type="text"
@@ -186,12 +292,14 @@ export default function ManageExams() {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                  placeholder="e.g., Software Engineering Exam"
                   required
+                  disabled={loading}
                 />
               </div>
               <div>
                 <label htmlFor="duration" className="block text-gray-700 font-medium mb-1">
-                  Duration (min)
+                  Duration (minutes) *
                 </label>
                 <input
                   type="number"
@@ -199,23 +307,28 @@ export default function ManageExams() {
                   value={formData.duration}
                   onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                  placeholder="e.g., 120"
+                  min="1"
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="bg-gray-300 text-gray-800 font-bold py-2 px-5 rounded-lg hover:bg-gray-400 transition-colors duration-200"
+                  className="bg-gray-300 text-gray-800 font-bold py-2 px-5 rounded-lg hover:bg-gray-400 transition-colors duration-200 disabled:bg-gray-200"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveExam}
-                  className="bg-blue-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                  className="bg-blue-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-blue-700 transition-colors duration-200 disabled:bg-blue-300"
+                  disabled={loading}
                 >
-                  {editingExam ? "Save Changes" : "Add Exam"}
+                  {loading ? "Saving..." : editingExam ? "Save Changes" : "Add Exam"}
                 </button>
               </div>
             </div>
@@ -223,7 +336,6 @@ export default function ManageExams() {
         </div>
       )}
 
-     
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md transform transition-all duration-300 scale-100">
@@ -234,15 +346,17 @@ export default function ManageExams() {
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleCloseDeleteModal}
-                className="bg-gray-300 text-gray-800 font-bold py-2 px-5 rounded-lg hover:bg-gray-400 transition-colors duration-200"
+                className="bg-gray-300 text-gray-800 font-bold py-2 px-5 rounded-lg hover:bg-gray-400 transition-colors duration-200 disabled:bg-gray-200"
+                disabled={loading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
-                className="bg-red-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-red-700 transition-colors duration-200"
+                className="bg-red-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-red-700 transition-colors duration-200 disabled:bg-red-300"
+                disabled={loading}
               >
-                Delete
+                {loading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
@@ -251,4 +365,3 @@ export default function ManageExams() {
     </div>
   );
 }
-

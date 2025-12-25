@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from "react";
-import axios from "../../api/axiosConfig";
+import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 import { AlertCircle, CheckCircle, Shuffle, Eye, Trash2, RefreshCw } from "lucide-react";
 
-const API_BASE = "/api";
-
+// Configure API base URL - uses proxy in development
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
 
 const sections = [
   { id: "A", name: "Quantitative Aptitude", marks: 1, type: "mcq" },
@@ -33,7 +34,6 @@ const Notification = ({ message, type, onClose }) => {
   );
 };
 
-
 export default function QuestionBank() {
   const [questions, setQuestions] = useState([]);
   const [exams, setExams] = useState([]);
@@ -45,7 +45,6 @@ export default function QuestionBank() {
   const [questionToDelete, setQuestionToDelete] = useState(null);
   const [notification, setNotification] = useState({ message: "", type: "" });
   
- 
   const [questionSets, setQuestionSets] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -67,12 +66,14 @@ export default function QuestionBank() {
   const [formData, setFormData] = useState(initialFormData);
 
   const token = localStorage.getItem("token");
-  const headers = { Authorization: `Bearer ${token}` };
+  const axiosConfig = {
+    headers: { Authorization: `Bearer ${token}` },
+    withCredentials: true
+  };
 
-  
   const fetchExams = async () => {
     try { 
-      const res = await axios.get(`/admin/exams`, { headers, withCredentials: true }); 
+      const res = await axios.get(`${API_BASE_URL}/admin/exams`, axiosConfig); 
       setExams(res.data); 
     } 
     catch (err) {
@@ -84,7 +85,7 @@ export default function QuestionBank() {
   const fetchQuestions = async () => {
     if (!selectedExam) return;
     try { 
-      const res = await axios.get(`/admin/exams/${selectedExam}/questions`, { headers, withCredentials: true });
+      const res = await axios.get(`${API_BASE_URL}/admin/exams/${selectedExam}/questions`, axiosConfig);
       setQuestions(res.data); 
     } 
     catch (err) { 
@@ -98,18 +99,16 @@ export default function QuestionBank() {
     
     const handlePopState = (event) => {
       window.history.pushState(null, "", window.location.href);
-      
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
- 
   const fetchQuestionSets = async () => {
     if (!selectedExam) return;
     try {
-      const response = await fetch(`${API_BASE}/examset/${selectedExam}/sets`, { 
+      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/sets`, { 
         method: 'GET',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -138,7 +137,6 @@ export default function QuestionBank() {
     }
   }, [selectedExam, activeTab]);
 
- 
   const handleGenerateSets = async () => {
     if (!selectedExam) {
       setNotification({ message: "Please select an exam first", type: "error" });
@@ -147,7 +145,7 @@ export default function QuestionBank() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch(`${API_BASE}/examset/${selectedExam}/generate`, {
+      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/generate`, {
         method: "POST",
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -180,7 +178,6 @@ export default function QuestionBank() {
     }
   };
 
-  
   const handleDeleteSets = async () => {
     if (!selectedExam) return;
     
@@ -190,7 +187,7 @@ export default function QuestionBank() {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_BASE}/examset/${selectedExam}/delete-sets`, {
+      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/delete-sets`, {
         method: "POST",
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -216,7 +213,6 @@ export default function QuestionBank() {
     }
   };
 
-  
   const handleViewSet = async (set) => {
     setLoadingQuestions(true);
     setViewingSet(set.setNumber);
@@ -230,7 +226,7 @@ export default function QuestionBank() {
         return;
       }
 
-      const response = await fetch(`${API_BASE}/admin/exams/${selectedExam}/questions`, {
+      const response = await fetch(`${API_BASE_URL}/admin/exams/${selectedExam}/questions`, {
         method: 'GET',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -268,7 +264,6 @@ export default function QuestionBank() {
     }
   };
 
-  
   const openModal = (question = null, sectionId = null) => {
     setEditingQuestion(question);
     if (question) { 
@@ -310,7 +305,6 @@ export default function QuestionBank() {
     setIsDeleteModalOpen(false); 
   };
 
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.questionText || !formData.examId) {
@@ -333,17 +327,17 @@ export default function QuestionBank() {
 
       if (editingQuestion) {
         await axios.put(
-          `/admin/exams/${formData.examId}/questions/${editingQuestion.id}`, 
+          `${API_BASE_URL}/admin/exams/${formData.examId}/questions/${editingQuestion.id}`, 
           payload, 
-          { headers, withCredentials: true }
+          axiosConfig
         );
         setNotification({ message: "Question updated successfully!", type: "success" });
       } 
       else {
         await axios.post(
-          `/admin/exams/${formData.examId}/questions`,
+          `${API_BASE_URL}/admin/exams/${formData.examId}/questions`,
           payload, 
-          { headers, withCredentials: true }
+          axiosConfig
         );
         setNotification({ message: "Question added successfully!", type: "success" });
       }
@@ -362,8 +356,8 @@ export default function QuestionBank() {
 
     try {
       await axios.delete(
-        `/admin/exams/${examId}/questions/${questionId}`,
-        { headers, withCredentials: true }
+        `${API_BASE_URL}/admin/exams/${examId}/questions/${questionId}`,
+        axiosConfig
       );
       setNotification({ message: "Question deleted successfully.", type: "success" });
       fetchQuestions();
@@ -412,7 +406,6 @@ export default function QuestionBank() {
 
       {selectedExam && (
         <>
-          
           <div className="bg-white rounded-xl shadow-md mb-8">
             <div className="flex border-b">
               <button
@@ -438,7 +431,6 @@ export default function QuestionBank() {
             </div>
           </div>
 
-         
           {activeTab === "questions" && (
             <>
               {sections.map(section => {
@@ -502,10 +494,8 @@ export default function QuestionBank() {
             </>
           )}
 
-          
           {activeTab === "sets" && (
             <>
-              
               <div className="bg-white p-6 rounded-xl shadow-md mb-8">
                 <div className="flex gap-4 flex-wrap">
                   <button
@@ -552,7 +542,6 @@ export default function QuestionBank() {
                 </p>
               </div>
 
-             
               {questionSets.length > 0 ? (
                 <div className="bg-white rounded-xl shadow-md overflow-hidden">
                   <div className="p-6 border-b">
@@ -629,7 +618,6 @@ export default function QuestionBank() {
         </div>
       )}
 
-     
       {isModalOpen && (
         <QuestionModal
           formData={formData}
@@ -646,7 +634,6 @@ export default function QuestionBank() {
         <DeleteModal closeModal={closeDeleteModal} handleDelete={handleDelete} />
       )}
 
-      
       {viewingSet && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
@@ -730,7 +717,6 @@ export default function QuestionBank() {
     </div>
   );
 }
-
 
 const QuestionModal = ({ formData, setFormData, closeModal, handleSubmit, sections, exams, editingQuestion }) => {
   const currentSection = sections.find(s => s.id === formData.section);
