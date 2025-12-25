@@ -1,7 +1,6 @@
 package com.truerize.entity;
 
 import java.time.LocalDateTime;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -43,12 +42,35 @@ public class StudentExamAssignment {
     
     private LocalDateTime completedAt;
     
+    // NEW FIELDS FOR ONE-TIME EXAM CONTROL
+    @Column(name = "session_id", length = 500)
+    private String sessionId;
+    
+    @Column(name = "ip_address", length = 50)
+    private String ipAddress;
+    
+    @Column(name = "user_agent", length = 500)
+    private String userAgent;
+    
+    @Column(name = "login_count", nullable = false)
+    private Integer loginCount = 0;
+    
+    @Column(name = "is_exam_locked", nullable = false)
+    private Boolean isExamLocked = false;
+    
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+    
     @PrePersist
     protected void onCreate() {
         assignedAt = LocalDateTime.now();
+        if (loginCount == null) loginCount = 0;
+        if (isExamLocked == null) isExamLocked = false;
+        if (hasStarted == null) hasStarted = false;
+        if (hasCompleted == null) hasCompleted = false;
     }
     
-    // Getters and Setters
+   
     public Long getId() {
         return id;
     }
@@ -127,5 +149,54 @@ public class StudentExamAssignment {
     
     public void setCompletedAt(LocalDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+    
+    // NEW GETTERS AND SETTERS
+    public String getSessionId() {
+        return sessionId;
+    }
+    
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+    
+    public String getIpAddress() {
+        return ipAddress;
+    }
+    
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+    
+    public String getUserAgent() {
+        return userAgent;
+    }
+    
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
+    }
+    
+    public Integer getLoginCount() {
+        return loginCount;
+    }
+    
+    public void setLoginCount(Integer loginCount) {
+        this.loginCount = loginCount;
+    }
+    
+    public Boolean getIsExamLocked() {
+        return isExamLocked;
+    }
+    
+    public void setIsExamLocked(Boolean isExamLocked) {
+        this.isExamLocked = isExamLocked;
+    }
+    
+    public LocalDateTime getLockedAt() {
+        return lockedAt;
+    }
+    
+    public void setLockedAt(LocalDateTime lockedAt) {
+        this.lockedAt = lockedAt;
     }
 }

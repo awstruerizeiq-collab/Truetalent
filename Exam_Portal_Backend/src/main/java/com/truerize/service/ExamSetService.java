@@ -8,8 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Random;
+
 import java.util.stream.Collectors;
+import java.security.SecureRandom;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,66 +34,85 @@ public class ExamSetService {
 
     @Autowired
     private ExamQuestionSetRepo examQuestionSetRepo;
-    
+
     @Autowired
     private StudentExamAssignmentRepo studentExamAssignmentRepo;
-    
+
     @Autowired
     private QuestionRepository questionRepository;
 
     @Transactional
     public Map<String, Object> generateQuestionSets(Long examId) {
-       
-        log.info("Exam ID: {}", examId);
+        log.info("========================================");
+        log.info("🎯 STARTING QUESTION SET GENERATION");
+        log.info("   Exam ID: {}", examId);
+        log.info("========================================");
 
         try {
-            int examIdInt = examId.intValue();
-          
-            List<Question> questions = questionRepository.findByExamId(examIdInt);
-            
-            if (questions == null || questions.isEmpty()) {
-                throw new IllegalStateException("No questions found for exam: " + examId);
+
+            if (examId == null || examId <= 0) {
+                throw new IllegalArgumentException("Invalid exam ID: " + examId);
             }
 
-            log.info("✓ Found {} questions", questions.size());
+            int examIdInt = examId.intValue();
+
+            log.info("📚 Step 1: Fetching questions for exam {}...", examId);
+            List<Question> questions = questionRepository.findByExamId(examIdInt);
+
+            if (questions == null || questions.isEmpty()) {
+                log.error("❌ No questions found for exam: {}", examId);
+                throw new IllegalStateException(
+                        "No questions found for exam " + examId + ". Please add questions first.");
+            }
+
+            log.info("✅ Found {} questions", questions.size());
 
             try {
+                log.info("🗑️ Step 2: Deleting existing student assignments...");
                 int deletedAssignments = studentExamAssignmentRepo.deleteByExamId(examIdInt);
-                log.info("✓ Deleted {} existing assignments", deletedAssignments);
+                log.info("✅ Deleted {} existing assignments", deletedAssignments);
             } catch (Exception e) {
                 log.warn("⚠️ Could not delete assignments: {}", e.getMessage());
             }
-           
+
+            log.info("🗑️ Step 3: Deleting existing question sets...");
             List<ExamQuestionSet> existingSets = examQuestionSetRepo.findByExamId(examIdInt);
-            
+
             if (!existingSets.isEmpty()) {
-                log.info("✓ Found {} existing question sets to delete", existingSets.size());
-             
+                log.info("   Found {} existing sets to delete", existingSets.size());
+
                 for (ExamQuestionSet set : existingSets) {
                     if (set.getQuestionIds() != null && !set.getQuestionIds().isEmpty()) {
                         set.getQuestionIds().clear();
                         examQuestionSetRepo.save(set);
-                        log.info("✓ Cleared question IDs for Set {}", set.getSetNumber());
                     }
                 }
-           
+
                 examQuestionSetRepo.flush();
-           
+
                 examQuestionSetRepo.deleteByExamId(examIdInt);
                 examQuestionSetRepo.flush();
-                log.info("✓ Deleted existing question sets");
+
+                log.info("✅ Deleted existing question sets");
+            } else {
+                log.info("✅ No existing sets to delete");
             }
 
-           
+            log.info("📂 Step 4: Grouping questions by section...");
             Map<String, List<Question>> questionsBySection = questions.stream()
                     .collect(Collectors.groupingBy(Question::getSection));
 
-            log.info("✓ Grouped questions by {} sections", questionsBySection.size());
+            log.info("✅ Grouped into {} sections:", questionsBySection.size());
+            for (Map.Entry<String, List<Question>> entry : questionsBySection.entrySet()) {
+                log.info("   Section '{}': {} questions", entry.getKey(), entry.getValue().size());
+            }
 
+            log.info("🎲 Step 5: Generating {} question sets...", NUMBER_OF_SETS);
             List<ExamQuestionSet> generatedSets = new ArrayList<>();
 
-          
             for (int setNum = 1; setNum <= NUMBER_OF_SETS; setNum++) {
+                log.info("   Generating Set {}...", setNum);
+
                 ExamQuestionSet questionSet = new ExamQuestionSet();
                 questionSet.setExamId(examIdInt);
                 questionSet.setSetNumber(setNum);
@@ -100,72 +120,87 @@ public class ExamSetService {
                 questionSet.setIsActive(true);
 
                 List<String> shuffledQuestionIds = new ArrayList<>();
-                
-              
+
                 List<String> sortedSections = new ArrayList<>(questionsBySection.keySet());
                 Collections.sort(sortedSections);
 
-              
                 for (String section : sortedSections) {
                     List<Question> sectionQuestions = new ArrayList<>(questionsBySection.get(section));
-                    Collections.shuffle(sectionQuestions, new Random(System.nanoTime() + setNum * 1000));
-                    
+
+                    Collections.shuffle(sectionQuestions, new SecureRandom());
+
                     shuffledQuestionIds.addAll(
-                        sectionQuestions.stream()
-                            .map(q -> String.valueOf(q.getId()))
-                            .collect(Collectors.toList())
-                    );
+                            sectionQuestions.stream()
+                                    .map(q -> String.valueOf(q.getId()))
+                                    .collect(Collectors.toList()));
                 }
 
                 questionSet.setQuestionIds(shuffledQuestionIds);
-                
+
                 ExamQuestionSet saved = examQuestionSetRepo.save(questionSet);
                 generatedSets.add(saved);
-                
-                log.info("✅ Generated Set {} with {} questions", setNum, shuffledQuestionIds.size());
+
+                log.info("   ✅ Set {} created with {} questions", setNum, shuffledQuestionIds.size());
             }
 
             Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
             result.put("examId", examId);
             result.put("totalQuestions", questions.size());
             result.put("numberOfSets", NUMBER_OF_SETS);
-            result.put("sets", generatedSets);
-            result.put("message", "Successfully generated " + NUMBER_OF_SETS + " question sets");
-            result.put("success", true);
+            result.put("sets", generatedSets.stream().map(set -> {
+                Map<String, Object> setInfo = new HashMap<>();
+                setInfo.put("id", set.getId());
+                setInfo.put("setNumber", set.getSetNumber());
+                setInfo.put("questionCount", set.getQuestionIds().size());
+                setInfo.put("isActive", set.getIsActive());
+                return setInfo;
+            }).collect(Collectors.toList()));
+            result.put("message", "Successfully generated " + NUMBER_OF_SETS + " question sets with " + questions.size()
+                    + " questions each");
 
             log.info("========================================");
             log.info("✅ GENERATION COMPLETE");
+            log.info("   Total Sets: {}", NUMBER_OF_SETS);
+            log.info("   Questions per Set: {}", questions.size());
             log.info("========================================");
 
             return result;
-            
-        } catch (Exception e) {
-            log.error("❌ Error generating question sets", e);
-            
+
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("❌ Business logic error: {}", e.getMessage());
+
             Map<String, Object> errorResult = new HashMap<>();
             errorResult.put("success", false);
             errorResult.put("error", e.getMessage());
             errorResult.put("examId", examId);
             return errorResult;
+
+        } catch (Exception e) {
+            log.error("❌ Unexpected error generating question sets", e);
+
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("success", false);
+            errorResult.put("error", "Failed to generate question sets");
+            errorResult.put("examId", examId);
+            return errorResult;
         }
     }
 
-   
     @Transactional
     public Map<String, Object> autoAssignStudentToSet(String studentId, Long examId) {
-      
-        log.info("Student ID: {}, Exam ID: {}", studentId, examId);
+        log.info("🎯 Auto-assigning student {} to exam {}", studentId, examId);
 
         try {
             int examIdInt = examId.intValue();
 
-            Optional<StudentExamAssignment> existingAssignment = 
-                studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, examIdInt);
-            
+            Optional<StudentExamAssignment> existingAssignment = studentExamAssignmentRepo
+                    .findByStudentIdAndExamId(studentId, examIdInt);
+
             if (existingAssignment.isPresent()) {
-                log.info("✅ Student already assigned to Set {}", 
-                    existingAssignment.get().getAssignedSetNumber());
-                
+                log.info("✅ Student already assigned to Set {}",
+                        existingAssignment.get().getAssignedSetNumber());
+
                 Map<String, Object> result = new HashMap<>();
                 result.put("success", true);
                 result.put("message", "Student already assigned");
@@ -177,39 +212,36 @@ public class ExamSetService {
                 return result;
             }
 
-            
             List<ExamQuestionSet> existingSets = examQuestionSetRepo.findByExamIdAndIsActiveTrue(examIdInt);
-            
+
             if (existingSets.isEmpty()) {
-                log.info(" No question sets found, generating...");
+                log.info("⚠️ No question sets found, generating...");
                 Map<String, Object> generateResult = generateQuestionSets(examId);
-                
+
                 if (!Boolean.TRUE.equals(generateResult.get("success"))) {
                     throw new IllegalStateException("Failed to generate question sets");
                 }
-                
+
                 existingSets = examQuestionSetRepo.findByExamIdAndIsActiveTrue(examIdInt);
-                
+
                 if (existingSets.isEmpty()) {
-                    throw new IllegalStateException("Failed to generate question sets");
+                    throw new IllegalStateException("Failed to create question sets");
                 }
             }
 
-            log.info("✓ Found {} active sets", existingSets.size());
+            log.info("✅ Found {} active sets", existingSets.size());
 
-         
             Map<Integer, Long> setDistribution = getSetDistribution(examIdInt);
-            
+
             log.info("Current distribution:");
             for (int i = 1; i <= NUMBER_OF_SETS; i++) {
                 long count = setDistribution.getOrDefault(i, 0L);
                 log.info("   Set {}: {} students", i, count);
             }
 
-           
             int assignedSetNumber = 1;
             long minStudents = Long.MAX_VALUE;
-            
+
             for (int setNum = 1; setNum <= NUMBER_OF_SETS; setNum++) {
                 long count = setDistribution.getOrDefault(setNum, 0L);
                 if (count < minStudents) {
@@ -218,10 +250,9 @@ public class ExamSetService {
                 }
             }
 
-            log.info("Assigning to Set {} (currently has {} students)", 
-                assignedSetNumber, minStudents);
+            log.info("✅ Assigning to Set {} (currently has {} students)",
+                    assignedSetNumber, minStudents);
 
-         
             int slotNumber = (int) (minStudents + 1);
 
             StudentExamAssignment assignment = new StudentExamAssignment();
@@ -244,15 +275,14 @@ public class ExamSetService {
             result.put("slotNumber", slotNumber);
             result.put("algorithm", "round-robin");
 
-           
             return result;
 
         } catch (DataIntegrityViolationException e) {
             log.warn("⚠️ Race condition detected, fetching existing assignment");
-            
-            Optional<StudentExamAssignment> existingAssignment = 
-                studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, examId.intValue());
-            
+
+            Optional<StudentExamAssignment> existingAssignment = studentExamAssignmentRepo
+                    .findByStudentIdAndExamId(studentId, examId.intValue());
+
             if (existingAssignment.isPresent()) {
                 Map<String, Object> result = new HashMap<>();
                 result.put("success", true);
@@ -264,16 +294,15 @@ public class ExamSetService {
                 result.put("algorithm", "round-robin");
                 return result;
             }
-            
-            log.error("❌ Error in auto-assignment", e);
+
             Map<String, Object> errorResult = new HashMap<>();
             errorResult.put("success", false);
             errorResult.put("error", "Assignment failed: " + e.getMessage());
             return errorResult;
-            
+
         } catch (Exception e) {
             log.error("❌ Error in auto-assignment", e);
-            
+
             Map<String, Object> errorResult = new HashMap<>();
             errorResult.put("success", false);
             errorResult.put("error", "Auto-assignment failed: " + e.getMessage());
@@ -283,18 +312,18 @@ public class ExamSetService {
 
     private Map<Integer, Long> getSetDistribution(int examId) {
         List<StudentExamAssignment> assignments = studentExamAssignmentRepo.findByExamId(examId);
-        
+
         return assignments.stream()
-            .collect(Collectors.groupingBy(
-                StudentExamAssignment::getAssignedSetNumber,
-                Collectors.counting()
-            ));
+                .collect(Collectors.groupingBy(
+                        StudentExamAssignment::getAssignedSetNumber,
+                        Collectors.counting()));
     }
 
     @Transactional
-    public Map<String, Object> assignStudentToSet(String studentId, Long examId, Integer setNumber, Integer slotNumber) {
-       
-        log.info("Student ID: {}, Exam ID: {}, Set: {}, Slot: {}", studentId, examId, setNumber, slotNumber);
+    public Map<String, Object> assignStudentToSet(String studentId, Long examId, Integer setNumber,
+            Integer slotNumber) {
+        log.info("📋 Manual assignment: Student {}, Exam {}, Set {}, Slot {}", studentId, examId, setNumber,
+                slotNumber);
 
         try {
             int examIdInt = examId.intValue();
@@ -302,18 +331,17 @@ public class ExamSetService {
             ExamQuestionSet questionSet = examQuestionSetRepo
                     .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, setNumber)
                     .orElseThrow(() -> new IllegalStateException(
-                        "Question set " + setNumber + " not found for exam " + examId));
+                            "Question set " + setNumber + " not found for exam " + examId));
 
-           
-            Optional<StudentExamAssignment> existingAssignment = 
-                studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, examIdInt);
-            
+            Optional<StudentExamAssignment> existingAssignment = studentExamAssignmentRepo
+                    .findByStudentIdAndExamId(studentId, examIdInt);
+
             if (existingAssignment.isPresent()) {
                 StudentExamAssignment existing = existingAssignment.get();
-                
+
                 if (existing.getAssignedSetNumber().equals(setNumber)) {
                     log.info("✅ Student already assigned to Set {}", setNumber);
-                    
+
                     Map<String, Object> result = new HashMap<>();
                     result.put("success", true);
                     result.put("message", "Student already assigned to this set");
@@ -324,14 +352,12 @@ public class ExamSetService {
                     result.put("algorithm", "manual");
                     return result;
                 }
-                
-                log.info(" Removing existing assignment (Set {}) for student {}", 
-                    existing.getAssignedSetNumber(), studentId);
+
+                log.info("🔄 Removing existing assignment (Set {})", existing.getAssignedSetNumber());
                 studentExamAssignmentRepo.delete(existing);
                 studentExamAssignmentRepo.flush();
             }
 
-         
             StudentExamAssignment assignment = new StudentExamAssignment();
             assignment.setStudentId(studentId);
             assignment.setExamId(examIdInt);
@@ -354,17 +380,9 @@ public class ExamSetService {
 
             return result;
 
-        } catch (DataIntegrityViolationException e) {
-            log.error("❌ Duplicate entry error", e);
-            
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("error", "Student is already assigned to this exam");
-            return errorResult;
-            
         } catch (Exception e) {
             log.error("❌ Error assigning student", e);
-            
+
             Map<String, Object> errorResult = new HashMap<>();
             errorResult.put("success", false);
             errorResult.put("error", e.getMessage());
@@ -372,41 +390,31 @@ public class ExamSetService {
         }
     }
 
-   
     public List<Question> getShuffledQuestionsForStudent(String studentId, Long examId) {
-        
-        log.info("Student ID: {}, Exam ID: {}", studentId, examId);
+        log.info("📚 Getting shuffled questions: Student {}, Exam {}", studentId, examId);
 
         int examIdInt = examId.intValue();
 
-      
         StudentExamAssignment assignment = studentExamAssignmentRepo
                 .findByStudentIdAndExamId(studentId, examIdInt)
-                .orElseThrow(() -> {
-                    log.error("❌ No assignment found");
-                    return new IllegalStateException(
-                        "Student " + studentId + " is not assigned to exam " + examId);
-                });
+                .orElseThrow(() -> new IllegalStateException(
+                        "Student " + studentId + " is not assigned to exam " + examId));
 
-        log.info("✓ Assignment found - Set: {}", assignment.getAssignedSetNumber());
+        log.info("✅ Assignment found - Set: {}", assignment.getAssignedSetNumber());
 
         ExamQuestionSet questionSet = examQuestionSetRepo
                 .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, assignment.getAssignedSetNumber())
-                .orElseThrow(() -> {
-                    log.error("❌ Question set not found");
-                    return new IllegalStateException(
-                        "Question set " + assignment.getAssignedSetNumber() + 
-                        " not found for exam " + examId);
-                });
+                .orElseThrow(() -> new IllegalStateException(
+                        "Question set " + assignment.getAssignedSetNumber() + " not found"));
 
-        log.info("✓ Question set found with {} questions", questionSet.getQuestionIds().size());
+        log.info("✅ Question set found with {} questions", questionSet.getQuestionIds().size());
 
         List<Integer> questionIds = questionSet.getQuestionIds().stream()
                 .map(Integer::parseInt)
                 .collect(Collectors.toList());
 
         List<Question> questions = questionRepository.findAllById(questionIds);
-       
+
         Map<Integer, Question> questionMap = questions.stream()
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
@@ -415,15 +423,13 @@ public class ExamSetService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        log.info("✅ Returning {} shuffled questions (Set {})", 
+        log.info("✅ Returning {} questions (Set {})",
                 orderedQuestions.size(), assignment.getAssignedSetNumber());
-        
 
         return orderedQuestions;
     }
 
     public Optional<StudentExamAssignment> getStudentAssignment(String studentId, Long examId) {
-        log.info(" Fetching assignment for student {} in exam {}", studentId, examId);
         return studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, examId.intValue());
     }
 
@@ -437,7 +443,7 @@ public class ExamSetService {
             assignment.setHasStarted(true);
             assignment.setStartedAt(LocalDateTime.now());
             studentExamAssignmentRepo.save(assignment);
-            log.info(" Marked exam {} as started for student {}", examId, studentId);
+            log.info("✅ Marked exam as started");
         }
     }
 
@@ -451,15 +457,14 @@ public class ExamSetService {
             assignment.setHasCompleted(true);
             assignment.setCompletedAt(LocalDateTime.now());
             studentExamAssignmentRepo.save(assignment);
-            log.info(" Marked exam {} as completed for student {}", examId, studentId);
+            log.info("✅ Marked exam as completed");
         }
     }
 
     public List<Map<String, Object>> getQuestionSetsForExam(Long examId) {
         List<ExamQuestionSet> sets = examQuestionSetRepo.findByExamId(examId.intValue());
-        
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (ExamQuestionSet set : sets) {
+
+        return sets.stream().map(set -> {
             Map<String, Object> setData = new HashMap<>();
             setData.put("id", set.getId());
             setData.put("setNumber", set.getSetNumber());
@@ -468,15 +473,13 @@ public class ExamSetService {
             setData.put("createdAt", set.getCreatedAt());
             setData.put("questionIds", set.getQuestionIds());
             setData.put("questionCount", set.getQuestionIds().size());
-            result.add(setData);
-        }
-        
-        return result;
+            return setData;
+        }).collect(Collectors.toList());
     }
 
     public Map<String, Object> getExamStatistics(Long examId) {
         int examIdInt = examId.intValue();
-        
+
         List<StudentExamAssignment> assignments = studentExamAssignmentRepo.findByExamId(examIdInt);
         List<ExamQuestionSet> sets = examQuestionSetRepo.findByExamId(examIdInt);
 
@@ -496,69 +499,64 @@ public class ExamSetService {
     @Transactional
     public Map<String, Object> deleteQuestionSetsForExam(Long examId) {
         int examIdInt = examId.intValue();
-        log.info(" Deleting question sets for exam: {}", examId);
+        log.info("🗑️ Deleting question sets for exam: {}", examId);
 
         try {
-            
+            // Delete assignments
             long assignmentCount = studentExamAssignmentRepo.countByExamId(examIdInt);
             if (assignmentCount > 0) {
-                log.warn(" Deleting {} student assignments", assignmentCount);
+                log.info("🗑️ Deleting {} student assignments", assignmentCount);
                 studentExamAssignmentRepo.deleteByExamId(examIdInt);
                 studentExamAssignmentRepo.flush();
             }
 
-            
+            // Delete question sets
             List<ExamQuestionSet> existingSets = examQuestionSetRepo.findByExamId(examIdInt);
-            
+
             if (!existingSets.isEmpty()) {
-                log.info("✓ Found {} question sets to delete", existingSets.size());
-             
+                log.info("🗑️ Found {} question sets to delete", existingSets.size());
+
                 for (ExamQuestionSet set : existingSets) {
                     if (set.getQuestionIds() != null && !set.getQuestionIds().isEmpty()) {
                         set.getQuestionIds().clear();
                         examQuestionSetRepo.save(set);
-                        log.info("✓ Cleared question IDs for Set {}", set.getSetNumber());
                     }
                 }
-             
+
                 examQuestionSetRepo.flush();
-               
+
                 Integer deletedCount = examQuestionSetRepo.deleteByExamId(examIdInt);
                 examQuestionSetRepo.flush();
-                
-                log.info(" Deleted {} question sets", deletedCount != null ? deletedCount : 0);
-                
-                Map<String, Object> result = new HashMap<>();
-                result.put("success", true);
-                result.put("message", "Question sets deleted successfully");
-                result.put("deletedCount", deletedCount != null ? deletedCount : 0);
-                return result;
+
+                log.info("✅ Deleted {} question sets", deletedCount != null ? deletedCount : 0);
+
+                return Map.of(
+                        "success", true,
+                        "message", "Question sets deleted successfully",
+                        "deletedCount", deletedCount != null ? deletedCount : 0);
             } else {
-                Map<String, Object> result = new HashMap<>();
-                result.put("success", true);
-                result.put("message", "No question sets found to delete");
-                result.put("deletedCount", 0);
-                return result;
+                return Map.of(
+                        "success", true,
+                        "message", "No question sets found to delete",
+                        "deletedCount", 0);
             }
-            
+
         } catch (Exception e) {
             log.error("❌ Error deleting question sets", e);
-            
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("error", e.getMessage());
-            return errorResult;
+
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage());
         }
     }
 
     public boolean hasQuestionSets(Long examId) {
-        long count = examQuestionSetRepo.countByExamIdAndIsActiveTrue(examId.intValue());
-        return count > 0;
+        return examQuestionSetRepo.countByExamIdAndIsActiveTrue(examId.intValue()) > 0;
     }
 
     public Map<String, Object> getSetDetails(Long examId, int setNumber) {
         int examIdInt = examId.intValue();
-        
+
         ExamQuestionSet questionSet = examQuestionSetRepo
                 .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, setNumber)
                 .orElseThrow(() -> new IllegalStateException(
@@ -567,105 +565,54 @@ public class ExamSetService {
         long studentCount = studentExamAssignmentRepo
                 .countByExamIdAndAssignedSetNumber(examIdInt, setNumber);
 
-        Map<String, Object> details = new HashMap<>();
-        details.put("examId", examId);
-        details.put("setNumber", setNumber);
-        details.put("questionCount", questionSet.getQuestionIds().size());
-        details.put("studentCount", studentCount);
-        details.put("createdAt", questionSet.getCreatedAt());
-        details.put("isActive", questionSet.getIsActive());
-
-        return details;
+        return Map.of(
+                "examId", examId,
+                "setNumber", setNumber,
+                "questionCount", questionSet.getQuestionIds().size(),
+                "studentCount", studentCount,
+                "createdAt", questionSet.getCreatedAt(),
+                "isActive", questionSet.getIsActive());
     }
 
-    public Map<String, Object> validateQuestionSets(Long examId) {
-        int examIdInt = examId.intValue();
-        
-        List<ExamQuestionSet> sets = examQuestionSetRepo.findByExamId(examIdInt);
-        List<Question> allQuestions = questionRepository.findByExamId(examIdInt);
-        
-        java.util.Set<Integer> validQuestionIds = allQuestions.stream()
-                .map(Question::getId)
-                .collect(Collectors.toSet());
-
-        Map<String, Object> validation = new HashMap<>();
-        validation.put("examId", examId);
-        validation.put("totalSets", sets.size());
-        validation.put("totalQuestions", allQuestions.size());
-
-        List<Map<String, Object>> setValidations = new ArrayList<>();
-        boolean allValid = true;
-
-        for (ExamQuestionSet set : sets) {
-            Map<String, Object> setValidation = new HashMap<>();
-            setValidation.put("setNumber", set.getSetNumber());
-            setValidation.put("questionCount", set.getQuestionIds().size());
-
-            List<String> invalidIds = set.getQuestionIds().stream()
-                    .filter(id -> !validQuestionIds.contains(Integer.parseInt(id)))
-                    .collect(Collectors.toList());
-
-            setValidation.put("invalidQuestionIds", invalidIds);
-            setValidation.put("isValid", invalidIds.isEmpty());
-
-            if (!invalidIds.isEmpty()) {
-                allValid = false;
-            }
-
-            setValidations.add(setValidation);
-        }
-
-        validation.put("setValidations", setValidations);
-        validation.put("allSetsValid", allValid);
-
-        return validation;
-    }
-   
     public Map<String, Object> getSetDetailsWithQuestions(Long examId, Integer setNumber) {
         try {
             int examIdInt = examId.intValue();
-            
+
             ExamQuestionSet questionSet = examQuestionSetRepo
                     .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, setNumber)
                     .orElseThrow(() -> new IllegalStateException(
-                            "Question set " + setNumber + " not found for exam " + examId));
-            
-           
+                            "Question set " + setNumber + " not found"));
+
             List<Question> allQuestions = questionRepository.findByExamId(examIdInt);
-           
+
             List<Integer> questionIds = questionSet.getQuestionIds().stream()
                     .map(Integer::parseInt)
                     .collect(Collectors.toList());
-            
+
             List<Question> setQuestions = questionRepository.findAllById(questionIds);
-            
-            Map<String, Object> debug = new HashMap<>();
-            debug.put("examId", examId);
-            debug.put("setNumber", setNumber);
-            debug.put("questionIdsInSet", questionSet.getQuestionIds());
-            debug.put("questionIdsCount", questionSet.getQuestionIds().size());
-            debug.put("totalQuestionsInExam", allQuestions.size());
-            debug.put("questionsFoundForSet", setQuestions.size());
-            debug.put("setIsActive", questionSet.getIsActive());
-            debug.put("allQuestionIdsInDatabase", allQuestions.stream().map(Question::getId).collect(Collectors.toList()));
-            debug.put("questionsInSet", setQuestions.stream().map(q -> {
-                Map<String, Object> qMap = new HashMap<>();
-                qMap.put("id", q.getId());
-                qMap.put("questionText", q.getQuestionText().substring(0, Math.min(50, q.getQuestionText().length())));
-                qMap.put("section", q.getSection());
-                qMap.put("type", q.getType());
-                qMap.put("marks", q.getMarks());
-                return qMap;
-            }).collect(Collectors.toList()));
-            
-            return debug;
+
+            return Map.of(
+                    "examId", examId,
+                    "setNumber", setNumber,
+                    "questionIdsInSet", questionSet.getQuestionIds(),
+                    "questionIdsCount", questionSet.getQuestionIds().size(),
+                    "totalQuestionsInExam", allQuestions.size(),
+                    "questionsFoundForSet", setQuestions.size(),
+                    "setIsActive", questionSet.getIsActive(),
+                    "allQuestionIdsInDatabase", allQuestions.stream().map(Question::getId).collect(Collectors.toList()),
+                    "questionsInSet", setQuestions.stream().map(q -> Map.of(
+                            "id", q.getId(),
+                            "questionText",
+                            q.getQuestionText().substring(0, Math.min(50, q.getQuestionText().length())),
+                            "section", q.getSection(),
+                            "type", q.getType(),
+                            "marks", q.getMarks())).collect(Collectors.toList()));
         } catch (Exception e) {
             log.error("❌ Error getting set details", e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", e.getMessage());
-            errorResponse.put("examId", examId);
-            errorResponse.put("setNumber", setNumber);
-            return errorResponse;
+            return Map.of(
+                    "error", e.getMessage(),
+                    "examId", examId,
+                    "setNumber", setNumber);
         }
     }
 }

@@ -49,72 +49,137 @@ class StringListConverter implements AttributeConverter<List<String>, String> {
 @Entity
 @Table(name = "question")
 public class Question {
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
-
+    
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "exam_id", nullable = false)
     @JsonBackReference
     private Exam exam;
-
+    
     @NotBlank
+    @Column(nullable = false)
     private String section;
-
+    
     @NotBlank
-    private String type; 
-
+    @Column(nullable = false)
+    private String type; // MCQ, Verbal, Coding
+    
     @NotBlank
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     @JsonProperty("questionText")
     private String questionText;
-
+    
     @Column(columnDefinition = "TEXT")
     private String answer;
-
+    
     @NotNull
+    @Column(nullable = false)
     private Integer marks;
-
+    
     @NotNull
+    @Column(name = "q_no", nullable = false)
     private Integer qNo;
-
+    
     @Convert(converter = StringListConverter.class)
     @Column(columnDefinition = "TEXT")
     private List<String> options;
-
+    
+    // Constructors
     public Question() {}
-
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
-
-    public Exam getExam() { return exam; }
-    public void setExam(Exam exam) { this.exam = exam; }
-
-    public String getSection() { return section; }
-    public void setSection(String section) { this.section = section; }
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-
-    public String getQuestionText() { return questionText; }
-    public void setQuestionText(String questionText) { this.questionText = questionText; }
-
-    public String getAnswer() { return answer; }
-    public void setAnswer(String answer) { this.answer = answer; }
-
-    public Integer getMarks() { return marks; }
-    public void setMarks(Integer marks) { this.marks = marks; }
-
-    public Integer getqNo() { return qNo; }
-    public void setqNo(Integer qNo) { this.qNo = qNo; }
-
-    public List<String> getOptions() { return options; }
-    public void setOptions(List<String> options) { this.options = options; }
-
+    
+    // Getters and Setters
+    public int getId() {
+        return id;
+    }
+    
+    public void setId(int id) {
+        this.id = id;
+    }
+    
+    public Exam getExam() {
+        return exam;
+    }
+    
+    public void setExam(Exam exam) {
+        this.exam = exam;
+    }
+    
+    public String getSection() {
+        return section;
+    }
+    
+    public void setSection(String section) {
+        this.section = section;
+    }
+    
+    public String getType() {
+        return type;
+    }
+    
+    public void setType(String type) {
+        this.type = type;
+    }
+    
+    public String getQuestionText() {
+        return questionText;
+    }
+    
+    public void setQuestionText(String questionText) {
+        this.questionText = questionText;
+    }
+    
+    public String getAnswer() {
+        return answer;
+    }
+    
+    public void setAnswer(String answer) {
+        this.answer = answer;
+    }
+    
+    public Integer getMarks() {
+        return marks;
+    }
+    
+    public void setMarks(Integer marks) {
+        this.marks = marks;
+    }
+    
+    public Integer getqNo() {
+        return qNo;
+    }
+    
+    public void setqNo(Integer qNo) {
+        this.qNo = qNo;
+    }
+    
+    public List<String> getOptions() {
+        return options;
+    }
+    
+    public void setOptions(List<String> options) {
+        this.options = options;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Question)) return false;
+        Question question = (Question) o;
+        return id == question.id;
+    }
+    
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(id);
+    }
+    
     @Override
     public String toString() {
-        return "Question{id=" + id + ", type='" + type + 
+        return "Question{id=" + id + ", section='" + section + "', type='" + type + 
                "', marks=" + marks + ", qNo=" + qNo + "}";
     }
 }
