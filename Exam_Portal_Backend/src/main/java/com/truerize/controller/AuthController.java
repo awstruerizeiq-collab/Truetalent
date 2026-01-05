@@ -256,8 +256,8 @@ public class AuthController {
                     ));
                 }
                 
-               
-                LocalDateTime now = LocalDateTime.now();
+                // converting UTC to IST
+                LocalDateTime now = LocalDateTime.now().plusHours(5).plusMinutes(30);
                 LocalDate slotDate = currentSlot.getDate();
                 LocalTime slotTime = currentSlot.getTime();
                 
