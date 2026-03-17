@@ -1,19 +1,31 @@
 package com.truerize.service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.truerize.config.FixedAdminCredentials;
 import com.truerize.entity.Exam;
 import com.truerize.entity.Role;
 import com.truerize.entity.Slot;
@@ -27,6 +39,8 @@ import com.truerize.repository.UserRepository;
 public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    private static final Pattern EMAIL_EXTRACT_PATTERN =
+        Pattern.compile("([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+)");
 
     @Autowired
     private UserRepository userRepository;
@@ -42,6 +56,9 @@ public class UserService {
 
     @Autowired
     private MailService mailService;
+
+    @Autowired
+    private AdminBootstrapService adminBootstrapService;
 
     @Transactional
     public Map<String, Object> assignExamToUsers(List<Integer> userIds, Integer examId) {
@@ -187,9 +204,12 @@ public class UserService {
         if (user.getName() == null || user.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Name is required");
         }
+
+        String normalizedEmail = user.getEmail().trim().toLowerCase(Locale.ROOT);
+        user.setEmail(normalizedEmail);
         
-        if (userRepository.existsByEmail(user.getEmail())) {
-            throw new IllegalArgumentException("Email already exists: " + user.getEmail());
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new IllegalArgumentException("Email already exists: " + normalizedEmail);
         }
         
         if (user.getStatus() == null || user.getStatus().trim().isEmpty()) {
@@ -198,13 +218,7 @@ public class UserService {
         
         
         if (user.getRoles() == null || user.getRoles().isEmpty()) {
-            Role candidateRole = roleRepository.findByName("CANDIDATE")
-                .orElseGet(() -> {
-                    Role newRole = new Role();
-                    newRole.setName("CANDIDATE");
-                    return roleRepository.save(newRole);
-                });
-            user.setRoles(Set.of(candidateRole));
+            user.setRoles(Set.of(getOrCreateCandidateRole()));
         } else {
            
             Set<Role> managedRoles = new HashSet<>();
@@ -239,12 +253,164 @@ public class UserService {
         return savedUser;
     }
 
+    @Transactional
+    public Map<String, Object> importUsersFromExcel(MultipartFile file, Integer slotId) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Excel file is required");
+        }
+        if (slotId == null) {
+            throw new IllegalArgumentException("Slot is required");
+        }
+
+        Slot slot = slotRepository.findById(slotId)
+            .orElseThrow(() -> new IllegalArgumentException("Slot not found with id: " + slotId));
+
+        if (slot.getSlotPassword() == null || slot.getSlotPassword().trim().isEmpty()) {
+            throw new IllegalArgumentException("Selected slot does not have a password configured");
+        }
+
+        DataFormatter formatter = new DataFormatter();
+        Set<String> emailsInFile = new HashSet<>();
+        List<String> failedRows = new ArrayList<>();
+        int processedRows = 0;
+        int createdCount = 0;
+
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
+            if (sheet == null) {
+                throw new IllegalArgumentException("Excel file does not contain any sheet");
+            }
+
+            Row headerRow = sheet.getRow(sheet.getFirstRowNum());
+            if (headerRow == null) {
+                throw new IllegalArgumentException("Excel file is empty");
+            }
+
+            Map<String, Integer> headerIndex = buildHeaderIndexMap(headerRow, formatter);
+            Integer nameColumn = findColumnIndex(headerIndex, "name", "candidate name", "student name", "full name");
+            Integer emailColumn = findColumnIndex(headerIndex, "email", "email id", "mail");
+            Integer collegeColumn = findColumnIndex(headerIndex, "college", "college name", "institution");
+            Integer statusColumn = findColumnIndex(headerIndex, "status");
+
+            if (nameColumn == null || emailColumn == null) {
+                throw new IllegalArgumentException("Excel must contain 'Name' and 'Email' columns in the header row");
+            }
+
+            for (int rowIndex = headerRow.getRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (isRowEmpty(row, formatter)) {
+                    continue;
+                }
+
+                processedRows++;
+                int excelRow = rowIndex + 1;
+
+                String name = getCellValue(row, nameColumn, formatter);
+                String email = normalizeUploadedEmail(getCellValue(row, emailColumn, formatter));
+                String collegeName = collegeColumn != null ? getCellValue(row, collegeColumn, formatter) : "";
+                String status = statusColumn != null ? getCellValue(row, statusColumn, formatter) : "";
+
+                if (name.isBlank() || email.isBlank()) {
+                    failedRows.add("Row " + excelRow + ": name and email are required");
+                    continue;
+                }
+
+                if (!isValidEmail(email)) {
+                    failedRows.add("Row " + excelRow + ": invalid email format (" + email + ")");
+                    continue;
+                }
+
+                if (!emailsInFile.add(email)) {
+                    failedRows.add("Row " + excelRow + ": duplicate email in file (" + email + ")");
+                    continue;
+                }
+
+                if (userRepository.existsByEmailIgnoreCase(email)) {
+                    failedRows.add("Row " + excelRow + ": email already exists (" + email + ")");
+                    continue;
+                }
+
+                try {
+                    User user = new User();
+                    user.setName(name);
+                    user.setEmail(email);
+                    user.setCollegeName(!collegeName.isBlank() ? collegeName : slot.getCollegeName());
+                    user.setPassword(slot.getSlotPassword());
+                    user.setStatus(!status.isBlank() ? status : "Active");
+                    user.setSlotNumber(slot.getSlotNumber());
+
+                    createUser(user);
+                    createdCount++;
+                } catch (Exception rowException) {
+                    failedRows.add("Row " + excelRow + ": " + rowException.getMessage());
+                }
+            }
+
+        } catch (IOException ioException) {
+            throw new RuntimeException("Failed to read uploaded file", ioException);
+        } catch (IllegalArgumentException badRequestException) {
+            throw badRequestException;
+        } catch (Exception parseException) {
+            throw new RuntimeException("Unable to parse Excel file. Please upload a valid .xlsx or .xls file", parseException);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", createdCount > 0);
+        response.put("slotId", slot.getId());
+        response.put("slotNumber", slot.getSlotNumber());
+        response.put("processedRows", processedRows);
+        response.put("createdCount", createdCount);
+        response.put("failedCount", failedRows.size());
+        response.put("failedRows", failedRows);
+
+        if (createdCount > 0 && failedRows.isEmpty()) {
+            response.put("message", "All users uploaded successfully");
+        } else if (createdCount > 0) {
+            response.put("message", "Upload completed with partial success");
+        } else {
+            response.put("message", "No users were created from the uploaded file");
+        }
+
+        return response;
+    }
+
     public Optional<User> authenticate(String email, String password) {
-        return userRepository.findByEmailAndPassword(email, password);
+        if (email == null || password == null) {
+            return Optional.empty();
+        }
+
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        String normalizedPassword = password.trim();
+
+        if (FixedAdminCredentials.EMAIL.equalsIgnoreCase(normalizedEmail)) {
+            if (FixedAdminCredentials.PASSWORD.equals(normalizedPassword)) {
+                return Optional.of(adminBootstrapService.ensureFixedAdminUser());
+            }
+            return Optional.empty();
+        }
+
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(normalizedEmail);
+        if (userOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        User user = userOpt.get();
+        if (user.getPassword() == null) {
+            return Optional.empty();
+        }
+
+        if (user.getPassword().equals(password) || user.getPassword().equals(normalizedPassword)) {
+            return Optional.of(user);
+        }
+
+        return Optional.empty();
     }
 
     public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
+        if (email == null || email.trim().isEmpty()) {
+            return false;
+        }
+        return userRepository.existsByEmailIgnoreCase(email.trim());
     }
 
     public Optional<User> findById(int id) {
@@ -275,10 +441,10 @@ public class UserService {
         }
        
         if (userDetails.getEmail() != null && !userDetails.getEmail().trim().isEmpty()) {
-            String newEmail = userDetails.getEmail().trim();
+            String newEmail = userDetails.getEmail().trim().toLowerCase(Locale.ROOT);
            
             if (!newEmail.equalsIgnoreCase(originalEmail)) {
-                if (userRepository.existsByEmail(newEmail)) {
+                if (userRepository.existsByEmailIgnoreCase(newEmail)) {
                     log.error("❌ Email already exists: {}", newEmail);
                     throw new IllegalArgumentException("Email already exists: " + newEmail);
                 }
@@ -357,4 +523,100 @@ public class UserService {
         userRepository.delete(user);
         log.info("✅ Deleted user: {}", user.getEmail());
     }
+
+    private Role getOrCreateCandidateRole() {
+        return roleRepository.findByName("CANDIDATE")
+            .orElseGet(() -> {
+                Role newRole = new Role();
+                newRole.setName("CANDIDATE");
+                return roleRepository.save(newRole);
+            });
+    }
+
+    private Map<String, Integer> buildHeaderIndexMap(Row headerRow, DataFormatter formatter) {
+        Map<String, Integer> headerMap = new HashMap<>();
+        for (Cell cell : headerRow) {
+            String header = normalizeHeader(formatter.formatCellValue(cell));
+            if (!header.isEmpty()) {
+                headerMap.put(header, cell.getColumnIndex());
+            }
+        }
+        return headerMap;
+    }
+
+    private Integer findColumnIndex(Map<String, Integer> headerMap, String... headerNames) {
+        for (String headerName : headerNames) {
+            Integer index = headerMap.get(normalizeHeader(headerName));
+            if (index != null) {
+                return index;
+            }
+        }
+        return null;
+    }
+
+    private String normalizeHeader(String header) {
+        if (header == null) {
+            return "";
+        }
+        return header.trim().toLowerCase(Locale.ROOT).replace("_", " ").replace("-", " ");
+    }
+
+    private boolean isRowEmpty(Row row, DataFormatter formatter) {
+        if (row == null) {
+            return true;
+        }
+
+        if (row.getFirstCellNum() < 0 || row.getLastCellNum() < 0) {
+            return true;
+        }
+
+        for (int i = row.getFirstCellNum(); i < row.getLastCellNum(); i++) {
+            String value = getCellValue(row, i, formatter);
+            if (!value.isBlank()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private String getCellValue(Row row, Integer columnIndex, DataFormatter formatter) {
+        if (row == null || columnIndex == null || columnIndex < 0) {
+            return "";
+        }
+
+        Cell cell = row.getCell(columnIndex, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+        if (cell == null) {
+            return "";
+        }
+
+        return formatter.formatCellValue(cell).trim();
+    }
+
+    private String normalizeUploadedEmail(String rawEmail) {
+        if (rawEmail == null) {
+            return "";
+        }
+
+        String normalized = rawEmail.replace('\u00A0', ' ').trim();
+        if (normalized.isEmpty()) {
+            return "";
+        }
+
+        if (normalized.toLowerCase(Locale.ROOT).startsWith("mailto:")) {
+            normalized = normalized.substring("mailto:".length()).trim();
+        }
+
+        Matcher matcher = EMAIL_EXTRACT_PATTERN.matcher(normalized);
+        if (matcher.find()) {
+            return matcher.group(1).trim().toLowerCase(Locale.ROOT);
+        }
+
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isValidEmail(String email) {
+        return email != null && email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
+    }
 }
+

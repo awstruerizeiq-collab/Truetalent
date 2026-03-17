@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 import { AlertCircle, CheckCircle, Shuffle, Eye, Trash2, RefreshCw } from "lucide-react";
@@ -51,6 +50,11 @@ export default function QuestionBank() {
   const [viewingSet, setViewingSet] = useState(null);
   const [viewSetQuestions, setViewSetQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [uploadingSection, setUploadingSection] = useState(null);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const fileInputRef = useRef(null);
+  const uploadSectionRef = useRef(null);
 
   const initialFormData = {
     id: null,
@@ -136,6 +140,19 @@ export default function QuestionBank() {
       fetchQuestionSets();
     }
   }, [selectedExam, activeTab]);
+  
+  useEffect(() => {
+    setSelectedQuestionIds(new Set());
+  }, [selectedExam]);
+
+  useEffect(() => {
+    setSelectedQuestionIds(prev => {
+      if (!prev.size) return prev;
+      const validIds = new Set(questions.map(q => q.id));
+      const next = new Set([...prev].filter(id => validIds.has(id)));
+      return next;
+    });
+  }, [questions]);
 
   const handleGenerateSets = async () => {
     if (!selectedExam) {
@@ -368,6 +385,177 @@ export default function QuestionBank() {
     }
   };
 
+  const toggleQuestionSelection = (questionId, checked) => {
+    setSelectedQuestionIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(questionId);
+      } else {
+        next.delete(questionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSectionSelection = (sectionId, checked) => {
+    const sectionIds = questions
+      .filter(q => q.section === sectionId)
+      .map(q => q.id);
+
+    setSelectedQuestionIds(prev => {
+      const next = new Set(prev);
+      sectionIds.forEach(id => {
+        if (checked) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+  };
+
+  const toggleAllSelection = (checked) => {
+    if (!checked) {
+      setSelectedQuestionIds(new Set());
+      return;
+    }
+    setSelectedQuestionIds(new Set(questions.map(q => q.id)));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!selectedQuestionIds.size) {
+      setNotification({ message: "Please select at least one question", type: "error" });
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${selectedQuestionIds.size} selected question(s)?`)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      const idsToDelete = Array.from(selectedQuestionIds);
+      const results = await Promise.allSettled(
+        idsToDelete.map(questionId =>
+          axios.delete(
+            `${API_BASE_URL}/admin/exams/${selectedExam}/questions/${questionId}`,
+            axiosConfig
+          )
+        )
+      );
+
+      const successCount = results.filter(r => r.status === "fulfilled").length;
+      const failedCount = results.length - successCount;
+
+      if (successCount > 0) {
+        await fetchQuestions();
+      }
+
+      setSelectedQuestionIds(new Set());
+      if (failedCount === 0) {
+        setNotification({ message: `Deleted ${successCount} question(s) successfully`, type: "success" });
+      } else {
+        setNotification({
+          message: `Deleted ${successCount} question(s), failed ${failedCount}`,
+          type: "error",
+        });
+      }
+    } catch (err) {
+      console.error("Error deleting selected questions:", err);
+      setNotification({ message: "Failed to delete selected questions", type: "error" });
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const triggerUploadFilePicker = (sectionId) => {
+    if (!selectedExam) {
+      setNotification({ message: "Please select an exam first", type: "error" });
+      return;
+    }
+    uploadSectionRef.current = sectionId;
+    setUploadingSection(sectionId);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedExtPattern = /\.(xlsx|xls|csv|txt|pdf|docx|doc)$/i;
+    if (!allowedExtPattern.test(file.name || "")) {
+      setNotification({
+        message: "Unsupported file. Allowed: xlsx, xls, csv, txt, pdf, docx, doc",
+        type: "error",
+      });
+      setUploadingSection(null);
+      uploadSectionRef.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (!selectedExam) {
+      setNotification({ message: "Please select an exam first", type: "error" });
+      setUploadingSection(null);
+      uploadSectionRef.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const sectionId = uploadSectionRef.current;
+    setUploadingSection(sectionId || "uploading");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (sectionId) {
+        formData.append("section", sectionId);
+      }
+
+      const uploadConfig = {
+        ...axiosConfig,
+        headers: {
+          ...(axiosConfig.headers || {}),
+          "Content-Type": "multipart/form-data",
+        },
+      };
+
+      const res = await axios.post(
+        `${API_BASE_URL}/admin/exams/${selectedExam}/questions/upload`,
+        formData,
+        uploadConfig
+      );
+
+      const createdCount = res.data?.createdCount || 0;
+      const failedCount = res.data?.failedCount || 0;
+      const failedRows = Array.isArray(res.data?.failedRows) ? res.data.failedRows : [];
+
+      const previewErrors = failedRows.slice(0, 2).join(" | ");
+      const message = failedCount > 0
+        ? `Imported ${createdCount} question(s), ${failedCount} failed${previewErrors ? ` (${previewErrors}${failedRows.length > 2 ? " ..." : ""})` : ""}`
+        : `Imported ${createdCount} question(s) successfully`;
+
+      setNotification({
+        message,
+        type: failedCount > 0 ? "error" : "success",
+      });
+
+      await fetchQuestions();
+    } catch (err) {
+      console.error("Error uploading questions:", err);
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Failed to upload questions";
+      setNotification({ message: errorMsg, type: "error" });
+    } finally {
+      setUploadingSection(null);
+      uploadSectionRef.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const getAnswerText = (q) => {
     const answerKey = q.answer?.toUpperCase();
     const optionIndex = answerKey ? ["A", "B", "C", "D"].indexOf(answerKey) : -1;
@@ -378,6 +566,9 @@ export default function QuestionBank() {
     return "N/A";
   };
 
+  const allQuestionsSelected =
+    questions.length > 0 && questions.every(q => selectedQuestionIds.has(q.id));
+
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <Notification 
@@ -386,6 +577,13 @@ export default function QuestionBank() {
         onClose={() => setNotification({ message: "", type: "" })} 
       />
       <h1 className="text-4xl font-bold mb-6 text-gray-800">Question Bank</h1>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv,.txt,.pdf,.doc,.docx"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
 
       <div className="bg-white p-4 rounded-xl shadow-md mb-8">
         <label htmlFor="exam-select" className="block text-lg font-semibold text-gray-700 mb-2">
@@ -433,10 +631,34 @@ export default function QuestionBank() {
 
           {activeTab === "questions" && (
             <>
+              <div className="bg-white rounded-xl shadow-md p-4 mb-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <label className="inline-flex items-center gap-2 text-gray-700 font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-blue-600"
+                      checked={allQuestionsSelected}
+                      onChange={(e) => toggleAllSelection(e.target.checked)}
+                    />
+                    Select All Questions
+                  </label>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={!selectedQuestionIds.size || bulkDeleting}
+                    className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed"
+                  >
+                    {bulkDeleting ? "Deleting..." : `Delete Selected (${selectedQuestionIds.size})`}
+                  </button>
+                </div>
+              </div>
+
               {sections.map(section => {
                 const sectionQuestions = questions
                   .filter(q => q.section === section.id)
                   .sort((a, b) => a.qNo - b.qNo);
+                const selectedCountInSection = sectionQuestions.filter(q => selectedQuestionIds.has(q.id)).length;
+                const sectionAllSelected =
+                  sectionQuestions.length > 0 && selectedCountInSection === sectionQuestions.length;
                 
                 return (
                   <div key={section.id} className="mb-8">
@@ -444,17 +666,37 @@ export default function QuestionBank() {
                       <h2 className="text-2xl font-semibold text-gray-700">
                         Section {section.id}: {section.name}
                       </h2>
-                      <button 
-                        onClick={() => openModal(null, section.id)} 
-                        className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-                      >
-                        + Add Question
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <label className="inline-flex items-center gap-2 text-sm text-gray-700 font-medium mr-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-blue-600"
+                            checked={sectionAllSelected}
+                            onChange={(e) => toggleSectionSelection(section.id, e.target.checked)}
+                            disabled={!sectionQuestions.length}
+                          />
+                          Select All
+                        </label>
+                        <button
+                          onClick={() => triggerUploadFilePicker(section.id)}
+                          className="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed"
+                          disabled={uploadingSection === section.id || uploadingSection === "uploading"}
+                        >
+                          {uploadingSection === section.id || uploadingSection === "uploading" ? "Uploading..." : "Upload Files"}
+                        </button>
+                        <button 
+                          onClick={() => openModal(null, section.id)} 
+                          className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
+                        >
+                          + Add Question
+                        </button>
+                      </div>
                     </div>
                     <div className="bg-white rounded-xl shadow-md overflow-hidden">
                       <table className="min-w-full bg-white">
                         <thead className="bg-gray-200 text-gray-600 uppercase text-sm">
                           <tr>
+                            <th className="py-3 px-4 text-center w-16">Select</th>
                             <th className="py-3 px-4 text-left">Q.No</th>
                             <th className="py-3 px-4 text-left">Question Text</th>
                             <th className="py-3 px-4 text-center">Marks</th>
@@ -465,6 +707,14 @@ export default function QuestionBank() {
                         <tbody className="text-gray-700">
                           {sectionQuestions.map(q => (
                             <tr key={q.id} className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-3 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-blue-600"
+                                  checked={selectedQuestionIds.has(q.id)}
+                                  onChange={(e) => toggleQuestionSelection(q.id, e.target.checked)}
+                                />
+                              </td>
                               <td className="py-3 px-4 font-semibold">{q.qNo}</td>
                               <td className="py-3 px-4">{q.questionText}</td>
                               <td className="py-3 px-4 text-center font-semibold">{q.marks}</td>

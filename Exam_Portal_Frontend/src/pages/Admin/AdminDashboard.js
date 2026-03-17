@@ -9,6 +9,9 @@ export default function Dashboard() {
     examsCompleted: 0,
   });
   const [latestUsers, setLatestUsers] = useState([]);
+  const isAdminUser = (user) =>
+    Array.isArray(user?.roles) &&
+    user.roles.some(role => (role?.name || '').toUpperCase() === "ADMIN");
 
   
   useEffect(() => {
@@ -24,7 +27,10 @@ export default function Dashboard() {
       setStats(res.data);
 
       const usersRes = await axios.get("/admin/users", { withCredentials: true });
-      setLatestUsers(usersRes.data.slice(-5).reverse());
+      const nonAdminUsers = Array.isArray(usersRes.data)
+        ? usersRes.data.filter(user => !isAdminUser(user))
+        : [];
+      setLatestUsers(nonAdminUsers.slice(-5).reverse());
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     }

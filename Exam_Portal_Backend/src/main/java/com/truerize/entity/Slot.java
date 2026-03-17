@@ -30,6 +30,9 @@ public class Slot {
     @Column(name = "time", nullable = false)
     private LocalTime time;
 
+    @Column(name = "slot_password")
+    private String slotPassword;
+
     @OneToMany(mappedBy = "slot", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"slot", "roles", "assignedExams", "proctoringRecords"})
     private Set<User> users = new HashSet<>();
@@ -68,6 +71,9 @@ public class Slot {
     
     public LocalTime getTime() { return time; }
     public void setTime(LocalTime time) { this.time = time; }
+
+    public String getSlotPassword() { return slotPassword; }
+    public void setSlotPassword(String slotPassword) { this.slotPassword = slotPassword; }
     
     public Set<User> getUsers() { return users; }
     public void setUsers(Set<User> users) { this.users = users; }
@@ -78,6 +84,7 @@ public class Slot {
     @Override
     public String toString() {
         return "Slot{id=" + id + ", slotNumber=" + slotNumber + 
-               ", collegeName='" + collegeName + "', date=" + date + ", time=" + time + '}';
+               ", collegeName='" + collegeName + "', date=" + date + ", time=" + time +
+               ", hasPassword=" + (slotPassword != null && !slotPassword.isBlank()) + '}';
     }
 }

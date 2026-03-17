@@ -63,6 +63,25 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Excel parsing for bulk user upload -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.30</version>
+        </dependency>
+
         <!-- MySQL Database -->
         <dependency>
             <groupId>com.mysql</groupId>

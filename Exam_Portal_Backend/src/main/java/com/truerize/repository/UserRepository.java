@@ -22,10 +22,14 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     List<User> findByAssignedExamsId(@Param("examId") Integer examId);
     
     Optional<User> findByEmail(String email);
+
+    Optional<User> findByEmailIgnoreCase(String email);
     
     Optional<User> findByEmailAndPassword(String email, String password);
    
     boolean existsByEmail(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
     
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.assignedExams LEFT JOIN FETCH u.roles")
     List<User> findAllWithExamsAndRoles();

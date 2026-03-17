@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
@@ -34,6 +34,9 @@ const StatusBadge = ({ status }) => {
 
 export default function ManageUsers() {
   const ITEMS_PER_PAGE = 5;
+  const isAdminUser = (user) =>
+    Array.isArray(user?.roles) &&
+    user.roles.some(role => (role?.name || '').toUpperCase() === 'ADMIN');
 
   const [allUsers, setAllUsers] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -59,9 +62,11 @@ export default function ManageUsers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
-  const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '' });
+  const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '' });
   const [isSlotSubmitting, setIsSlotSubmitting] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null);
+  const [isExcelUploading, setIsExcelUploading] = useState(false);
+  const excelFileInputRef = useRef(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -138,7 +143,7 @@ export default function ManageUsers() {
 
   const addNewSlot = () => {
     setEditingSlot(null);
-    setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '' });
+    setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '' });
     setIsSlotModalOpen(true);
   };
 
@@ -148,14 +153,15 @@ export default function ManageUsers() {
       slotNumber: slot.slotNumber.toString(),
       date: slot.date || '',
       time: slot.time || '',
-      collegeName: slot.collegeName || ''
+      collegeName: slot.collegeName || '',
+      slotPassword: slot.slotPassword || ''
     });
     setIsSlotModalOpen(true);
   };
 
   const handleCreateOrUpdateSlot = async () => {
-    if (!slotFormData.slotNumber || !slotFormData.date || !slotFormData.time) {
-      setNotification({ message: 'Please fill in slot number, date, and time', type: 'error', persistent: false });
+    if (!slotFormData.slotNumber || !slotFormData.date || !slotFormData.time || !slotFormData.slotPassword) {
+      setNotification({ message: 'Please fill in slot number, date, time, and slot password', type: 'error', persistent: false });
       return;
     }
 
@@ -165,7 +171,8 @@ export default function ManageUsers() {
         slotNumber: parseInt(slotFormData.slotNumber),
         date: slotFormData.date,
         time: slotFormData.time,
-        collegeName: slotFormData.collegeName || null
+        collegeName: slotFormData.collegeName || null,
+        slotPassword: slotFormData.slotPassword
       };
 
       if (editingSlot) {
@@ -370,6 +377,68 @@ export default function ManageUsers() {
     }
   };
 
+  const triggerExcelUpload = () => {
+    if (!currentSlotId) {
+      setNotification({ message: 'Please create and select a slot first', type: 'error', persistent: false });
+      return;
+    }
+    excelFileInputRef.current?.click();
+  };
+
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      setNotification({ message: 'Please upload a valid Excel file (.xlsx or .xls)', type: 'error', persistent: false });
+      e.target.value = '';
+      return;
+    }
+
+    if (!currentSlotId) {
+      setNotification({ message: 'Please select a slot before uploading', type: 'error', persistent: false });
+      e.target.value = '';
+      return;
+    }
+
+    setIsExcelUploading(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('slotId', currentSlotId);
+
+      const res = await axios.post(`${API_BASE_URL}/admin/users/upload-excel`, uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        withCredentials: true
+      });
+
+      const createdCount = res.data?.createdCount || 0;
+      const failedCount = res.data?.failedCount || 0;
+      const failedRows = Array.isArray(res.data?.failedRows) ? res.data.failedRows : [];
+
+      let message = `Upload complete: ${createdCount} user(s) created in the selected slot`;
+      if (failedCount > 0) {
+        const preview = failedRows.slice(0, 2).join(' | ');
+        message += `. ${failedCount} row(s) failed${preview ? ` (${preview}${failedRows.length > 2 ? ' ...' : ''})` : ''}`;
+      }
+
+      setNotification({
+        message,
+        type: failedCount > 0 ? 'error' : 'success',
+        persistent: false
+      });
+
+      await fetchUsers();
+    } catch (err) {
+      console.error('Excel upload error:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to upload users from Excel';
+      setNotification({ message: errorMsg, type: 'error', persistent: false });
+    } finally {
+      setIsExcelUploading(false);
+      e.target.value = '';
+    }
+  };
+
   const requestSort = (key) => {
     let direction='ascending';
     if(sortConfig.key===key && sortConfig.direction==='ascending') direction='descending';
@@ -381,8 +450,8 @@ export default function ManageUsers() {
     
     const currentSlot = slots.find(s => s.id === currentSlotId);
     const usersInSlot = currentSlotId 
-      ? allUsers.filter(u => u.slotNumber === currentSlot?.slotNumber)
-      : allUsers;
+      ? allUsers.filter(u => !isAdminUser(u) && u.slotNumber === currentSlot?.slotNumber)
+      : allUsers.filter(u => !isAdminUser(u));
 
     let filtered = usersInSlot.filter(u =>
       (u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -407,13 +476,20 @@ export default function ManageUsers() {
     return sortedAndFilteredUsers.slice(start, start+ITEMS_PER_PAGE);
   }, [currentPage, sortedAndFilteredUsers]);
 
-  const handleSelectUser = (id) => setSelectedUsers(prev => prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+  const handleSelectUser = (id) => {
+    const selectedUser = allUsers.find(u => u.id === id);
+    if (selectedUser && isAdminUser(selectedUser)) return;
+    setSelectedUsers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
   const handleSelectAllOnPage = (e) => {
-    const pageIds = paginatedUsers.map(u=>u.id);
+    const pageIds = paginatedUsers.filter(u => !isAdminUser(u)).map(u=>u.id);
     if(e.target.checked) setSelectedUsers(prev=>[...new Set([...prev, ...pageIds])]);
     else setSelectedUsers(prev=>prev.filter(id=>!pageIds.includes(id)));
   };
-  const areAllOnPageSelected = paginatedUsers.length>0 && paginatedUsers.every(u=>selectedUsers.includes(u.id));
+  const selectableUsersOnPage = paginatedUsers.filter(u => !isAdminUser(u));
+  const areAllOnPageSelected =
+    selectableUsersOnPage.length > 0 &&
+    selectableUsersOnPage.every(u => selectedUsers.includes(u.id));
 
   const handleSlotChange = (slotId) => {
     setCurrentSlotId(slotId);
@@ -611,6 +687,14 @@ export default function ManageUsers() {
               </button>
             </>
           )}
+          <button
+            onClick={triggerExcelUpload}
+            disabled={!currentSlotId || isExcelUploading}
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+            title={!currentSlotId ? "Please create a slot first" : "Upload users Excel for selected slot"}
+          >
+            {isExcelUploading ? 'Uploading...' : 'Upload Excel'}
+          </button>
           <button 
             onClick={()=>openModal()} 
             disabled={!currentSlotId}
@@ -619,6 +703,13 @@ export default function ManageUsers() {
           >
             + Add User
           </button>
+          <input
+            ref={excelFileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleExcelUpload}
+          />
         </div>
       </div>
 
@@ -685,7 +776,9 @@ export default function ManageUsers() {
                         type="checkbox" 
                         checked={selectedUsers.includes(u.id)} 
                         onChange={()=>handleSelectUser(u.id)}
-                        className="cursor-pointer"
+                        className="cursor-pointer disabled:cursor-not-allowed"
+                        disabled={isAdminUser(u)}
+                        title={isAdminUser(u) ? "Admin user cannot be selected for candidate actions" : ""}
                       />
                     </td>
                     <td className="py-3 px-4 font-medium">
@@ -712,7 +805,9 @@ export default function ManageUsers() {
                         </button>
                         <button 
                           onClick={()=>openDeleteModal(u)} 
-                          className="text-red-600 hover:text-red-800 font-semibold"
+                          className="text-red-600 hover:text-red-800 font-semibold disabled:text-gray-400 disabled:cursor-not-allowed"
+                          disabled={isAdminUser(u)}
+                          title={isAdminUser(u) ? "Fixed admin user cannot be deleted" : ""}
                         >
                           Delete
                         </button>
@@ -961,6 +1056,24 @@ export default function ManageUsers() {
                   onChange={e=>setSlotFormData({...slotFormData, collegeName:e.target.value})} 
                   className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Slot Password *
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter slot password"
+                  value={slotFormData.slotPassword}
+                  onChange={e=>setSlotFormData({...slotFormData, slotPassword:e.target.value})}
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This password will be assigned to users created from Excel upload for this slot.
+                </p>
               </div>
               
               <div>

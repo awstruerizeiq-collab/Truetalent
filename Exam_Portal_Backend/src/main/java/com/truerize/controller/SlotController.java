@@ -50,11 +50,12 @@ public class SlotController {
     @PostMapping
     public ResponseEntity<?> createSlot(@RequestBody Slot slot) {
         try {
-            log.info("Received request to create slot: slotNumber={}, collegeName={}, date={}, time={}", 
+            log.info("Received request to create slot: slotNumber={}, collegeName={}, date={}, time={}, hasPassword={}", 
                     slot.getSlotNumber(), 
                     slot.getCollegeName() != null ? slot.getCollegeName() : "N/A",
                     slot.getDate(), 
-                    slot.getTime());
+                    slot.getTime(),
+                    slot.getSlotPassword() != null && !slot.getSlotPassword().isBlank());
             Slot createdSlot = slotService.createSlot(slot);
             log.info("Successfully created slot with id: {}", createdSlot.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(createdSlot);
@@ -71,12 +72,13 @@ public class SlotController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSlot(@PathVariable Integer id, @RequestBody Slot slotDetails) {
         try {
-            log.info("Received request to update slot {}: slotNumber={}, collegeName={}, date={}, time={}", 
+            log.info("Received request to update slot {}: slotNumber={}, collegeName={}, date={}, time={}, hasPassword={}", 
                     id, 
                     slotDetails.getSlotNumber(), 
                     slotDetails.getCollegeName() != null ? slotDetails.getCollegeName() : "N/A",
                     slotDetails.getDate(), 
-                    slotDetails.getTime());
+                    slotDetails.getTime(),
+                    slotDetails.getSlotPassword() != null && !slotDetails.getSlotPassword().isBlank());
             Slot updatedSlot = slotService.updateSlot(id, slotDetails);
             log.info("Successfully updated slot {}", id);
             return ResponseEntity.ok(updatedSlot);

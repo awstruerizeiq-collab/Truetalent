@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.truerize.entity.Question;
 import com.truerize.service.QuestionService;
@@ -84,6 +86,34 @@ public class QuestionController {
                 .body(Map.of(
                     "success", false,
                     "error", "Failed to add question",
+                    "message", e.getMessage()
+                ));
+        }
+    }
+
+    @PostMapping("/upload")
+    public ResponseEntity<?> uploadQuestionsFile(
+            @PathVariable int examId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "section", required = false) String section) {
+        try {
+            Map<String, Object> result = questionService.importQuestionsFromFile(examId, file, section);
+            int failedCount = ((Number) result.getOrDefault("failedCount", 0)).intValue();
+            HttpStatus status = failedCount > 0 ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK;
+            return ResponseEntity.status(status).body(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "success", false,
+                    "error", "Validation error",
+                    "message", e.getMessage()
+                ));
+        } catch (Exception e) {
+            log.error("Error uploading questions for exam {}", examId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                    "success", false,
+                    "error", "Failed to upload questions",
                     "message", e.getMessage()
                 ));
         }

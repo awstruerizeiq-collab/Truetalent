@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.truerize.entity.User;
 import com.truerize.service.UserService;
@@ -67,6 +68,23 @@ public class UserController {
             log.error("Error creating user", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to create user"));
+        }
+    }
+
+    @PostMapping("/upload-excel")
+    public ResponseEntity<?> uploadUsersFromExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("slotId") Integer slotId) {
+        try {
+            Map<String, Object> result = userService.importUsersFromExcel(file, slotId);
+            boolean hasFailures = ((Integer) result.getOrDefault("failedCount", 0)) > 0;
+            return ResponseEntity.status(hasFailures ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK).body(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error importing users from Excel", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to import users from Excel"));
         }
     }
 
