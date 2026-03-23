@@ -1,6 +1,0 @@
-﻿section,question_text,option_a,option_b,option_c,option_d,answer,marks
-A,What is 12 + 8?,18,20,22,24,B,1
-A,Which number is prime?,21,27,29,33,C,1
-B,If all roses are flowers and some flowers fade, which is true?,All roses fade,Some roses may fade,No flower fades,Roses are not flowers,B,1
-C,Choose the correct synonym of "Rapid",Slow,Quick,Weak,Silent,B,1
-D,Which keyword is used to inherit a class in Java?,implements,extends,inherit,super,B,2

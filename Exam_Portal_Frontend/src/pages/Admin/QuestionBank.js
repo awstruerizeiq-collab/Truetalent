@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import axios from "../../api/axiosConfig";
 import { v4 as uuidv4 } from "uuid";
 import { AlertCircle, CheckCircle, Shuffle, Eye, Trash2, RefreshCw } from "lucide-react";
 
-// Configure API base URL - uses proxy in development
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
+const API_BASE_URL = "";
 
 const sections = [
   { id: "A", name: "Quantitative Aptitude", marks: 1, type: "mcq" },
@@ -69,16 +68,19 @@ export default function QuestionBank() {
   };
   const [formData, setFormData] = useState(initialFormData);
 
-  const token = localStorage.getItem("token");
   const axiosConfig = {
-    headers: { Authorization: `Bearer ${token}` },
     withCredentials: true
   };
 
   const fetchExams = async () => {
     try { 
       const res = await axios.get(`${API_BASE_URL}/admin/exams`, axiosConfig); 
-      setExams(res.data); 
+      const examList = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.exams)
+          ? res.data.exams
+          : [];
+      setExams(examList); 
     } 
     catch (err) {
       console.error("Error fetching exams:", err);
@@ -90,7 +92,8 @@ export default function QuestionBank() {
     if (!selectedExam) return;
     try { 
       const res = await axios.get(`${API_BASE_URL}/admin/exams/${selectedExam}/questions`, axiosConfig);
-      setQuestions(res.data); 
+      const questionsList = Array.isArray(res.data) ? res.data : [];
+      setQuestions(questionsList); 
     } 
     catch (err) { 
       console.error("Error fetching questions:", err);
@@ -112,20 +115,8 @@ export default function QuestionBank() {
   const fetchQuestionSets = async () => {
     if (!selectedExam) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/sets`, { 
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const response = await axios.get(`${API_BASE_URL}/examset/${selectedExam}/sets`, axiosConfig);
+      const data = Array.isArray(response.data) ? response.data : [];
       setQuestionSets(data);
     } catch (err) {
       console.error("Error fetching question sets:", err);
@@ -162,32 +153,24 @@ export default function QuestionBank() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/generate`, {
-        method: "POST",
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setNotification({ 
-          message: `Successfully generated ${data.numberOfSets || 5} question sets with ${data.totalQuestions} questions!`, 
-          type: "success" 
-        });
-        await fetchQuestionSets();
-      } else {
-        const errorMsg = data.error || data.message || "Failed to generate question sets";
-        console.error("Generation error:", data);
-        setNotification({ message: errorMsg, type: "error" });
+      const response = await axios.post(
+        `${API_BASE_URL}/examset/${selectedExam}/generate`,
+        {},
+        axiosConfig
+      );
+      const data = response.data || {};
+      if (data.success === false) {
+        throw new Error(data.error || data.message || "Failed to generate question sets");
       }
+      setNotification({ 
+        message: `Successfully generated ${data.numberOfSets || 5} question sets with ${data.totalQuestions || 0} questions!`, 
+        type: "success" 
+      });
+      await fetchQuestionSets();
     } catch (err) {
       console.error("Error generating sets:", err);
       setNotification({ 
-        message: "Network error: Unable to generate question sets. Please check if the server is running.", 
+        message: err.response?.data?.error || err.message || "Unable to generate question sets.", 
         type: "error" 
       });
     } finally {
@@ -204,27 +187,20 @@ export default function QuestionBank() {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/examset/${selectedExam}/delete-sets`, {
-        method: "POST",
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        setNotification({ message: "Question sets deleted successfully!", type: "success" });
-        setQuestionSets([]);
-      } else {
-        const errorMsg = data.error || data.message || "Failed to delete sets";
-        setNotification({ message: errorMsg, type: "error" });
+      const response = await axios.post(
+        `${API_BASE_URL}/examset/${selectedExam}/delete-sets`,
+        {},
+        axiosConfig
+      );
+      const data = response.data || {};
+      if (data.success === false) {
+        throw new Error(data.error || data.message || "Failed to delete sets");
       }
+      setNotification({ message: "Question sets deleted successfully!", type: "success" });
+      setQuestionSets([]);
     } catch (err) {
       console.error("Error deleting sets:", err);
-      setNotification({ message: "Failed to delete question sets: " + err.message, type: "error" });
+      setNotification({ message: err.response?.data?.error || "Failed to delete question sets", type: "error" });
     } finally {
       setIsDeleting(false);
     }
@@ -243,20 +219,8 @@ export default function QuestionBank() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/exams/${selectedExam}/questions`, {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const allQuestions = await response.json();
+      const response = await axios.get(`${API_BASE_URL}/admin/exams/${selectedExam}/questions`, axiosConfig);
+      const allQuestions = Array.isArray(response.data) ? response.data : [];
       
       const questionMap = {};
       allQuestions.forEach(q => {
@@ -596,7 +560,7 @@ export default function QuestionBank() {
           className="w-full max-w-md p-3 border rounded-lg"
         >
           <option value="">-- Choose an Exam --</option>
-          {exams.map(exam => (
+          {(Array.isArray(exams) ? exams : []).map(exam => (
             <option key={exam.id} value={exam.id}>{exam.title}</option>
           ))}
         </select>

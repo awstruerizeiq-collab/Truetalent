@@ -16,6 +16,8 @@ import com.truerize.repository.SlotRepository;
 public class SlotService {
 
     private static final Logger log = LoggerFactory.getLogger(SlotService.class);
+    private static final int MIN_PASS_PERCENTAGE = 0;
+    private static final int MAX_PASS_PERCENTAGE = 100;
 
     @Autowired
     private SlotRepository slotRepository;
@@ -46,6 +48,10 @@ public class SlotService {
         if (slot.getSlotPassword() == null || slot.getSlotPassword().trim().isEmpty()) {
             throw new IllegalArgumentException("Slot password is required");
         }
+        if (slot.getPassPercentage() == null) {
+            slot.setPassPercentage(80);
+        }
+        validatePassPercentage(slot.getPassPercentage());
         if (slotRepository.existsBySlotNumber(slot.getSlotNumber())) {
             throw new IllegalArgumentException("Slot number " + slot.getSlotNumber() + " already exists");
         }
@@ -112,9 +118,21 @@ public class SlotService {
             }
         }
 
+        if (slotDetails.getPassPercentage() != null) {
+            validatePassPercentage(slotDetails.getPassPercentage());
+            if (!slotDetails.getPassPercentage().equals(slot.getPassPercentage())) {
+                slot.setPassPercentage(slotDetails.getPassPercentage());
+                hasChanges = true;
+            }
+        }
+
         if (slot.getSlotPassword() == null || slot.getSlotPassword().trim().isEmpty()) {
             throw new IllegalArgumentException("Slot password is required");
         }
+        if (slot.getPassPercentage() == null) {
+            slot.setPassPercentage(80);
+        }
+        validatePassPercentage(slot.getPassPercentage());
 
         if (!hasChanges) {
             log.info("No changes detected for slot {}", id);
@@ -152,5 +170,14 @@ public class SlotService {
 
     public long countSlots() {
         return slotRepository.count();
+    }
+
+    private void validatePassPercentage(Integer passPercentage) {
+        if (passPercentage == null) {
+            throw new IllegalArgumentException("Pass percentage is required");
+        }
+        if (passPercentage < MIN_PASS_PERCENTAGE || passPercentage > MAX_PASS_PERCENTAGE) {
+            throw new IllegalArgumentException("Pass percentage must be between 0 and 100");
+        }
     }
 }

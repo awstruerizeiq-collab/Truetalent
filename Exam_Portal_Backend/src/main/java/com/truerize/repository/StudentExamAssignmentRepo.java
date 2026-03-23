@@ -37,4 +37,10 @@ public interface StudentExamAssignmentRepo extends JpaRepository<StudentExamAssi
     Optional<StudentExamAssignment> findByStudentIdAndExamIdAndHasStartedTrueAndHasCompletedFalse(String studentId, int examId);
    
     boolean existsByStudentIdAndExamId(String studentId, int examId);
+
+    Optional<StudentExamAssignment> findTopByStudentIdAndHasStartedTrueAndHasCompletedFalseOrderByAssignedAtDesc(String studentId);
+
+    Optional<StudentExamAssignment> findTopByStudentIdAndHasCompletedFalseOrderByAssignedAtDesc(String studentId);
+
+    List<StudentExamAssignment> findByStudentIdOrderByAssignedAtDesc(String studentId);
 }

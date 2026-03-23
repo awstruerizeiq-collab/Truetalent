@@ -3,6 +3,7 @@ package com.truerize.controller;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import com.truerize.entity.User;
 import com.truerize.entity.StudentExamAssignment;
 import com.truerize.service.UserService;
 import com.truerize.service.ExamService;
+import com.truerize.service.ExamSetService;
 import com.truerize.service.SlotService;
 import com.truerize.repository.StudentExamAssignmentRepo;
 import com.truerize.repository.TestSubmissionRepository;
@@ -36,9 +38,12 @@ public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private static final int SLOT_WINDOW_MINUTES = 30; // Login window duration
+    private static final int SLOT_GRACE_MINUTES = 1; // Grace for boundary seconds and network delay
+    private static final ZoneId EXAM_TIME_ZONE = ZoneId.of("Asia/Kolkata");
 
     @Autowired private UserService userService;
     @Autowired private ExamService examService;
+    @Autowired private ExamSetService examSetService;
     @Autowired private SlotService slotService;
     @Autowired private StudentExamAssignmentRepo assignmentRepo;
     @Autowired private TestSubmissionRepository testSubmissionRepository;
@@ -256,19 +261,21 @@ public class AuthController {
                     ));
                 }
                 
-                // converting UTC to IST
-                LocalDateTime now = LocalDateTime.now().plusHours(5).plusMinutes(30);
+                // Evaluate slot timings in exam timezone (IST) without manual offsets
+                LocalDateTime now = LocalDateTime.now(EXAM_TIME_ZONE);
                 LocalDate slotDate = currentSlot.getDate();
                 LocalTime slotTime = currentSlot.getTime();
                 
                 LocalDateTime slotStart = LocalDateTime.of(slotDate, slotTime);
-                LocalDateTime slotEnd = slotStart.plusMinutes(SLOT_WINDOW_MINUTES); // Changed to 30 minutes
+                LocalDateTime slotEnd = slotStart.plusMinutes(SLOT_WINDOW_MINUTES);
+                LocalDateTime slotStartWithGrace = slotStart.minusMinutes(SLOT_GRACE_MINUTES);
+                LocalDateTime slotEndWithGrace = slotEnd.plusMinutes(SLOT_GRACE_MINUTES);
                 
                 log.info("🕐 Slot {} validation - Current: {}, Slot Start: {}, Slot End: {}", 
                         userSlotNumber, now, slotStart, slotEnd);
                 
              
-                if (now.isBefore(slotStart)) {
+                if (now.isBefore(slotStartWithGrace)) {
                     log.warn("⏰ REJECTED - Login too early. Student: {}, Slot: {}", 
                             studentId, userSlotNumber);
                     
@@ -297,7 +304,7 @@ public class AuthController {
                 }
                 
              
-                if (now.isAfter(slotEnd)) {
+                if (now.isAfter(slotEndWithGrace)) {
                     log.warn("⏰ REJECTED - Login too late. Student: {}, Slot: {}", 
                             studentId, userSlotNumber);
                     
@@ -333,16 +340,50 @@ public class AuthController {
                     log.info("📝 Starting exam {} for student {}", examId, studentId);
                     
                     try {
-                        Optional<StudentExamAssignment> assignOpt = 
-                            assignmentRepo.findByStudentIdAndExamId(studentId, examId);
-                        
-                        if (assignOpt.isEmpty()) {
-                            log.warn("⚠️ Student {} not assigned to exam {}", studentId, examId);
+                        boolean examAssignedToUser = user.getAssignedExams() != null
+                            && user.getAssignedExams().stream().anyMatch(e -> e.getId() == examId);
+
+                        if (!examAssignedToUser) {
                             return ResponseEntity.status(403).body(Map.of(
                                 "success", false,
                                 "error", "Access Denied",
                                 "message", "You are not registered for this exam."
                             ));
+                        }
+
+                        Optional<StudentExamAssignment> assignOpt = 
+                            assignmentRepo.findByStudentIdAndExamId(studentId, examId);
+
+                        if (assignOpt.isEmpty()) {
+                            Map<String, Object> autoAssignResult =
+                                examSetService.autoAssignStudentToSet(studentId, examId.longValue());
+
+                            if (!Boolean.TRUE.equals(autoAssignResult.get("success"))) {
+                                log.warn("Auto-assignment failed for student {} exam {}: {}",
+                                    studentId, examId, autoAssignResult.get("error"));
+                            }
+
+                            assignOpt = assignmentRepo.findByStudentIdAndExamId(studentId, examId);
+                        }
+                        
+                        if (assignOpt.isEmpty()) {
+                            Map<String, Object> autoAssignResult =
+                                examSetService.autoAssignStudentToSet(studentId, examId.longValue());
+
+                            if (!Boolean.TRUE.equals(autoAssignResult.get("success"))) {
+                                log.warn("Auto-assignment failed for student {} exam {}: {}",
+                                    studentId, examId, autoAssignResult.get("error"));
+                            }
+
+                            assignOpt = assignmentRepo.findByStudentIdAndExamId(studentId, examId);
+
+                            if (assignOpt.isEmpty()) {
+                                return ResponseEntity.status(403).body(Map.of(
+                                    "success", false,
+                                    "error", "Exam Setup Pending",
+                                    "message", "Your exam is assigned, but question set setup is incomplete. Please contact admin."
+                                ));
+                            }
                         }
                         
                         StudentExamAssignment exam = assignOpt.get();
@@ -460,3 +501,4 @@ public class AuthController {
         }
     }
 }
+

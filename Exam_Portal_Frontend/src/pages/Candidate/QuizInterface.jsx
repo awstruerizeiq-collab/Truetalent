@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Clock, User, BookOpen, AlertCircle, ChevronLeft, ChevronRight, Video, VideoOff, AlertTriangle, CheckCircle } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "../../api/axiosConfig";
 import truerizeLogo from "../../assets/images/Truerize_Logo.png";
 
@@ -11,12 +11,13 @@ const sectionMap = [
   { id: "D", name: "Technical MCQ's", marks: 2, type: "mcq" },
 ];
 
-const DEFAULT_TEST_EXAM_ID = "12";
-
 const QuizInterface = () => {
   const navigate = useNavigate();
   const urlParams = useParams();
-  const liveExamId = urlParams.examId || DEFAULT_TEST_EXAM_ID;
+  const location = useLocation();
+  const stateExamId = location.state?.examId ? String(location.state.examId) : null;
+  const sessionExamId = sessionStorage.getItem("currentExamId");
+  const liveExamId = urlParams.examId || stateExamId || sessionExamId || null;
 
   const [examData, setExamData] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -452,6 +453,9 @@ const QuizInterface = () => {
 
         if (res.data && res.data.userId) {
           setStudentId(String(res.data.userId));
+          if (res.data.currentExamId) {
+            sessionStorage.setItem("currentExamId", String(res.data.currentExamId));
+          }
 
           try {
             const userRes = await axios.get(
@@ -490,6 +494,13 @@ const QuizInterface = () => {
       try {
         setLoading(true);
         setError(null);
+
+        if (!liveExamId) {
+          setError("No active exam found. Please return to Candidate Dashboard and start again.");
+          setLoading(false);
+          setTimeout(() => navigate('/candidate'), 3000);
+          return;
+        }
 
         let isAssigned = false;
         let currentSetNumber = null;
@@ -956,7 +967,7 @@ const QuizInterface = () => {
                 </div>
               </div>
 
-              {currentQ.type === "mcq" && currentQ.options && currentQ.options.length > 0 && (
+              {currentQ?.type?.toLowerCase() === "mcq" && currentQ.options && currentQ.options.length > 0 && (
                 <div className="space-y-3 mb-8">
                   {currentQ.options.map((option, index) => {
                     const optionValue = String.fromCharCode(65 + index);

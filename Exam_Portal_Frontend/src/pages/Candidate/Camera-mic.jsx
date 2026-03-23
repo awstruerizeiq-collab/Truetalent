@@ -5,9 +5,11 @@ import axios from "../../api/axiosConfig";
 function ExamStart() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { userId: passedUserId, examId } = location.state || {};
+  const { userId: passedUserId, examId: passedExamId } = location.state || {};
+  const storedExamId = Number(sessionStorage.getItem("currentExamId")) || null;
 
   const [userId, setUserId] = useState(passedUserId || null);
+  const [examId, setExamId] = useState(passedExamId || storedExamId);
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
 
@@ -40,24 +42,29 @@ function ExamStart() {
         });
         if (res.data && res.data.userId) {
           setUserId(res.data.userId);
-          console.log("✅ User authenticated:", res.data.userId);
+          if (!examId && res.data.currentExamId) {
+            setExamId(Number(res.data.currentExamId));
+            sessionStorage.setItem("currentExamId", String(res.data.currentExamId));
+          }
         }
       } catch (err) {
-        console.error("❌ Failed to get user:", err);
+        console.error("Failed to get user:", err);
         setError("Failed to authenticate. Please login again.");
       }
     };
 
-    if (!userId) {
+    if (!userId || !examId) {
       getCurrentUser();
     }
-  }, [userId]);
+  }, [userId, examId]);
 
-  // Validate required data
+    // Validate required data
   useEffect(() => {
     if (!examId) {
-      console.error("❌ No exam ID provided");
+      console.error("No exam ID provided");
       setError("Invalid exam session. Please return to the exam list.");
+    } else {
+      sessionStorage.setItem("currentExamId", String(examId));
     }
   }, [examId]);
 
@@ -215,21 +222,20 @@ function ExamStart() {
   };
 
   const startExam = async () => {
-    if (!userId) {
+    if (!userId || !examId) {
       alert("Unable to start exam. Please refresh and try again.");
       return;
     }
 
-    console.log("🎯 Starting exam...");
     if (await startRecording()) {
       setIsExamStarted(true);
-      
+
       const quizSessionKey = `quiz_access_${userId}`;
-      sessionStorage.setItem(quizSessionKey, 'true');
-      console.log("✅ Quiz session key set");
-      
+      sessionStorage.setItem(quizSessionKey, "true");
+      sessionStorage.setItem("currentExamId", String(examId));
+
       setTimeout(() => {
-        navigate("/quiz");
+        navigate("/quiz", { state: { examId } });
       }, 300);
     }
   };
@@ -680,3 +686,4 @@ function ExamStart() {
 }
 
 export default ExamStart;
+

@@ -57,7 +57,7 @@ public class ExamSetService {
             int examIdInt = examId.intValue();
 
             log.info("📚 Step 1: Fetching questions for exam {}...", examId);
-            List<Question> questions = questionRepository.findByExamId(examIdInt);
+            List<Question> questions = questionRepository.findByExam_IdOrderByQNoAsc(examIdInt);
 
             if (questions == null || questions.isEmpty()) {
                 log.error("❌ No questions found for exam: {}", examId);
@@ -402,8 +402,21 @@ public class ExamSetService {
 
         log.info("✅ Assignment found - Set: {}", assignment.getAssignedSetNumber());
 
-        ExamQuestionSet questionSet = examQuestionSetRepo
-                .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, assignment.getAssignedSetNumber())
+        Optional<ExamQuestionSet> questionSetOpt = examQuestionSetRepo
+                .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, assignment.getAssignedSetNumber());
+
+        if (questionSetOpt.isEmpty()) {
+            log.warn("Question set {} not found for exam {}. Regenerating sets.",
+                    assignment.getAssignedSetNumber(), examIdInt);
+            Map<String, Object> regenerateResult = generateQuestionSets(examId);
+            if (!Boolean.TRUE.equals(regenerateResult.get("success"))) {
+                throw new IllegalStateException("Question set regeneration failed");
+            }
+            questionSetOpt = examQuestionSetRepo
+                    .findByExamIdAndSetNumberAndIsActiveTrue(examIdInt, assignment.getAssignedSetNumber());
+        }
+
+        ExamQuestionSet questionSet = questionSetOpt
                 .orElseThrow(() -> new IllegalStateException(
                         "Question set " + assignment.getAssignedSetNumber() + " not found"));
 
@@ -583,7 +596,7 @@ public class ExamSetService {
                     .orElseThrow(() -> new IllegalStateException(
                             "Question set " + setNumber + " not found"));
 
-            List<Question> allQuestions = questionRepository.findByExamId(examIdInt);
+            List<Question> allQuestions = questionRepository.findByExam_IdOrderByQNoAsc(examIdInt);
 
             List<Integer> questionIds = questionSet.getQuestionIds().stream()
                     .map(Integer::parseInt)

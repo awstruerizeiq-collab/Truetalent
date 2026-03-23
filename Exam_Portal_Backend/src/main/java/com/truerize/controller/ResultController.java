@@ -26,6 +26,7 @@ import com.truerize.entity.Result;
 import com.truerize.entity.Slot;
 import com.truerize.repository.ResultRepository;
 import com.truerize.repository.SlotRepository;
+import com.truerize.service.AnswerSheetService;
 import com.truerize.service.MailService;
 import com.truerize.service.ResultService;
 
@@ -35,8 +36,7 @@ import com.truerize.service.ResultService;
 public class ResultController {
 
     private static final Logger log = LoggerFactory.getLogger(ResultController.class);
-
-    private static final int PASSING_SCORE = 80;
+    private static final int DEFAULT_PASSING_SCORE = 80;
 
     @Autowired
     private ResultRepository resultRepository;
@@ -50,95 +50,67 @@ public class ResultController {
     @Autowired
     private ResultService resultService;
 
+    @Autowired
+    private AnswerSheetService answerSheetService;
+
     @GetMapping("/results/all")
     public ResponseEntity<List<Result>> getAllResults(
             @RequestParam(required = false) Integer slotId,
             @RequestParam(required = false) Integer slotNumber) {
-
-        log.info("📋 Fetching results - slotId: {}, slotNumber: {}", slotId, slotNumber);
-
         try {
             List<Result> results;
 
             if (slotId != null) {
                 results = resultRepository.findBySlotId(slotId);
-                log.info("✅ Found {} results for slot ID: {}", results.size(), slotId);
             } else if (slotNumber != null) {
                 results = resultRepository.findBySlotNumber(slotNumber);
-                log.info("✅ Found {} results for slot number: {}", results.size(), slotNumber);
             } else {
                 results = resultRepository.findAllWithSlotOrderedBySlotAndScore();
-                log.info("✅ Found {} total results", results.size());
             }
 
-            return ResponseEntity.ok(results);
+            answerSheetService.enrichResultsWithIdentifiers(results);
+            resultService.enrichResultsWithScorePercentage(results);
 
+            return ResponseEntity.ok(results);
         } catch (Exception e) {
-            log.error("❌ Error fetching results", e);
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(List.of());
+            log.error("Error fetching results", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(List.of());
         }
     }
 
     @GetMapping("/results/by-slots")
     public ResponseEntity<?> getResultsBySlots() {
         try {
-            log.info("📊 Fetching results grouped by slots");
-
             List<Slot> allSlots = slotRepository.findAllOrderedBySlotNumber();
-            log.info("📊 Found {} slots in database", allSlots.size());
-
             List<Map<String, Object>> slotResults = new ArrayList<>();
 
             for (Slot slot : allSlots) {
                 Map<String, Object> slotData = new HashMap<>();
-
                 slotData.put("slotId", slot.getId());
                 slotData.put("slotNumber", slot.getSlotNumber());
                 slotData.put("collegeName", slot.getCollegeName() != null ? slot.getCollegeName() : "");
-
                 slotData.put("date", slot.getDate() != null ? slot.getDate().toString() : "");
                 slotData.put("time", slot.getTime() != null ? slot.getTime().toString() : "");
+                slotData.put("slotPassPercentage", resultService.resolvePassingScore(slot));
 
                 List<Result> results = resultRepository.findBySlotId(slot.getId());
-                log.info("   Slot {} (ID: {}): {} results",
-                        slot.getSlotNumber(), slot.getId(), results.size());
-
                 slotData.put("totalCandidates", results.size());
 
                 if (!results.isEmpty()) {
-
-                    double avgScore = results.stream()
-                            .mapToInt(Result::getScore)
-                            .average()
-                            .orElse(0.0);
-
-                    int maxScore = results.stream()
-                            .mapToInt(Result::getScore)
-                            .max()
-                            .orElse(0);
-
-                    int minScore = results.stream()
-                            .mapToInt(Result::getScore)
-                            .min()
-                            .orElse(0);
-
-                    long passed = results.stream()
-                            .filter(r -> r.getScore() >= PASSING_SCORE)
-                            .count();
+                    double avgScore = results.stream().mapToInt(Result::getScore).average().orElse(0.0);
+                    int maxScore = results.stream().mapToInt(Result::getScore).max().orElse(0);
+                    int minScore = results.stream().mapToInt(Result::getScore).min().orElse(0);
+                    long passed = results.stream().filter(resultService::isPass).count();
                     long failed = results.size() - passed;
-
-                    double passPercentage = (passed * 100.0 / results.size());
+                    double passRate = passed * 100.0 / results.size();
 
                     slotData.put("averageScore", Math.round(avgScore * 100.0) / 100.0);
                     slotData.put("maxScore", maxScore);
                     slotData.put("minScore", minScore);
                     slotData.put("passedCount", passed);
                     slotData.put("failedCount", failed);
-                    slotData.put("passPercentage", Math.round(passPercentage * 100.0) / 100.0);
+                    slotData.put("passPercentage", Math.round(passRate * 100.0) / 100.0);
                 } else {
-
                     slotData.put("averageScore", 0.0);
                     slotData.put("maxScore", 0);
                     slotData.put("minScore", 0);
@@ -150,33 +122,24 @@ public class ResultController {
                 slotResults.add(slotData);
             }
 
-            log.info("✅ Successfully grouped results for {} slots", slotResults.size());
-
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("totalSlots", slotResults.size());
             response.put("slots", slotResults);
-
             return ResponseEntity.ok(response);
-
         } catch (Exception e) {
-            log.error("❌ Error fetching slot-wise results", e);
-
+            log.error("Error fetching slot-wise results", e);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Failed to fetch slot-wise results: " + e.getMessage());
             errorResponse.put("slots", new ArrayList<>());
-
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
     @GetMapping("/results/statistics")
     public ResponseEntity<?> getStatistics() {
         try {
-            log.info("📊 Fetching overall statistics");
-
             List<Result> allResults = resultRepository.findAll();
             long totalResults = allResults.size();
 
@@ -189,7 +152,8 @@ public class ResultController {
                 emptyStats.put("averageScore", 0.0);
                 emptyStats.put("maxScore", 0);
                 emptyStats.put("minScore", 0);
-                emptyStats.put("passingScore", PASSING_SCORE);
+                emptyStats.put("passingScore", "Slot based");
+                emptyStats.put("defaultPassingScore", DEFAULT_PASSING_SCORE);
                 emptyStats.put("resultsReleased", 0);
                 emptyStats.put("resultsUnreleased", 0);
                 emptyStats.put("totalSlots", slotRepository.count());
@@ -197,31 +161,15 @@ public class ResultController {
                 return ResponseEntity.ok(emptyStats);
             }
 
-            long passed = allResults.stream()
-                    .filter(r -> r.getScore() >= PASSING_SCORE)
-                    .count();
+            long passed = allResults.stream().filter(resultService::isPass).count();
             long failed = totalResults - passed;
-
-            double avgScore = allResults.stream()
-                    .mapToInt(Result::getScore)
-                    .average()
-                    .orElse(0.0);
-
-            int maxScore = allResults.stream()
-                    .mapToInt(Result::getScore)
-                    .max()
-                    .orElse(0);
-
-            int minScore = allResults.stream()
-                    .mapToInt(Result::getScore)
-                    .min()
-                    .orElse(0);
-
+            double avgScore = allResults.stream().mapToInt(Result::getScore).average().orElse(0.0);
+            int maxScore = allResults.stream().mapToInt(Result::getScore).max().orElse(0);
+            int minScore = allResults.stream().mapToInt(Result::getScore).min().orElse(0);
             long releasedCount = allResults.stream()
                     .filter(r -> "Result Released".equalsIgnoreCase(r.getStatus()))
                     .count();
 
-            // Slot statistics
             long totalSlots = slotRepository.count();
             Map<Integer, Long> resultsPerSlot = allResults.stream()
                     .filter(r -> r.getSlot() != null)
@@ -237,22 +185,18 @@ public class ResultController {
             stats.put("averageScore", Math.round(avgScore * 100.0) / 100.0);
             stats.put("maxScore", maxScore);
             stats.put("minScore", minScore);
-            stats.put("passingScore", PASSING_SCORE);
+            stats.put("passingScore", "Slot based");
+            stats.put("defaultPassingScore", DEFAULT_PASSING_SCORE);
             stats.put("resultsReleased", releasedCount);
             stats.put("resultsUnreleased", totalResults - releasedCount);
             stats.put("totalSlots", totalSlots);
             stats.put("resultsPerSlot", resultsPerSlot);
 
-            log.info("✅ Statistics generated: {} total results, {} slots", totalResults, totalSlots);
-
             return ResponseEntity.ok(stats);
-
         } catch (Exception e) {
-            log.error("❌ Error fetching statistics", e);
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to fetch statistics: " + e.getMessage());
+            log.error("Error fetching statistics", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
+                    .body(Map.of("error", "Failed to fetch statistics: " + e.getMessage()));
         }
     }
 
@@ -260,21 +204,15 @@ public class ResultController {
     public ResponseEntity<?> getResultById(@PathVariable Long id) {
         try {
             Optional<Result> result = resultRepository.findById(id);
-
             if (result.isPresent()) {
                 return ResponseEntity.ok(result.get());
-            } else {
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Result not found with ID: " + id);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(errorResponse);
             }
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Result not found with ID: " + id));
         } catch (Exception e) {
-            log.error("❌ Error fetching result {}", id, e);
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to fetch result");
+            log.error("Error fetching result {}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
+                    .body(Map.of("error", "Failed to fetch result"));
         }
     }
 
@@ -284,49 +222,41 @@ public class ResultController {
             Optional<Result> optionalResult = resultRepository.findById(id);
 
             if (optionalResult.isEmpty()) {
-                log.warn("⚠️ Result not found: {}", id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("Result not found with ID: " + id);
             }
 
             Result result = optionalResult.get();
-
             if ("Result Released".equalsIgnoreCase(result.getStatus())) {
-                log.warn("⚠️ Result already released for: {}", result.getEmail());
                 return ResponseEntity.ok("Result already released for " + result.getEmail());
             }
 
-            boolean passed = result.getScore() >= PASSING_SCORE;
-            String originalStatus = passed ? "Pass" : "Failed";
-
-            log.info("📊 Score: {} | Passing Score: {} | Status: {}",
-                    result.getScore(), PASSING_SCORE, originalStatus);
+            boolean passed = resultService.isPass(result);
+            int slotPassScore = resultService.resolvePassingScore(result.getSlot());
+            log.info("Release result id={} score={} threshold={} status={}",
+                    result.getId(), result.getScore(), slotPassScore, passed ? "Pass" : "Fail");
 
             result.setStatus("Result Released");
             resultRepository.save(result);
 
             try {
                 if (passed) {
-                    log.info("✅ PASS - Sending congratulatory email to: {}", result.getEmail());
                     mailService.sendResultReleasedEmail(result.getEmail());
-                    return ResponseEntity.ok(
-                            String.format("✅ Result released! Congratulations email sent to %s (Score: %d)",
-                                    result.getEmail(), result.getScore()));
+                    return ResponseEntity.ok(String.format(
+                            "Result released! Pass email sent to %s (Score: %d, PassThreshold: %d)",
+                            result.getEmail(), result.getScore(), slotPassScore));
                 } else {
-                    log.info("❌ FAIL - Sending regret email to: {}", result.getEmail());
                     mailService.sendRegretEmail(result.getEmail());
-                    return ResponseEntity.ok(
-                            String.format("✅ Result released! Regret email sent to %s (Score: %d)",
-                                    result.getEmail(), result.getScore()));
+                    return ResponseEntity.ok(String.format(
+                            "Result released! Fail email sent to %s (Score: %d, PassThreshold: %d)",
+                            result.getEmail(), result.getScore(), slotPassScore));
                 }
             } catch (Exception emailError) {
-                log.error("❌ Failed to send email to {}", result.getEmail(), emailError);
-                return ResponseEntity.ok(
-                        "Result released but email sending failed: " + emailError.getMessage());
+                return ResponseEntity.ok("Result released but email sending failed: " + emailError.getMessage());
             }
 
         } catch (Exception e) {
-            log.error("❌ Error releasing result", e);
+            log.error("Error releasing result", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to release result: " + e.getMessage());
         }
@@ -336,7 +266,10 @@ public class ResultController {
     public ResponseEntity<String> sendAutomaticMails() {
         try {
             List<Result> results = resultRepository.findAll();
-            int passed = 0, failed = 0, errors = 0, alreadyReleased = 0;
+            int passed = 0;
+            int failed = 0;
+            int errors = 0;
+            int alreadyReleased = 0;
 
             for (Result result : results) {
                 try {
@@ -345,48 +278,38 @@ public class ResultController {
                         continue;
                     }
 
-                    boolean didPass = result.getScore() >= PASSING_SCORE;
+                    boolean didPass = resultService.isPass(result);
+                    int slotPassScore = resultService.resolvePassingScore(result.getSlot());
 
                     if (didPass) {
-                        log.info("✅ PASS - Sending congratulatory email to: {} (Score: {})",
-                                result.getEmail(), result.getScore());
+                        log.info("PASS mail to {} (score {}, threshold {})",
+                                result.getEmail(), result.getScore(), slotPassScore);
                         mailService.sendResultReleasedEmail(result.getEmail());
                         passed++;
                     } else {
-                        log.info("❌ FAIL - Sending regret email to: {} (Score: {})",
-                                result.getEmail(), result.getScore());
+                        log.info("FAIL mail to {} (score {}, threshold {})",
+                                result.getEmail(), result.getScore(), slotPassScore);
                         mailService.sendRegretEmail(result.getEmail());
                         failed++;
                     }
 
                     result.setStatus("Result Released");
                     resultRepository.save(result);
-
                 } catch (Exception e) {
-                    log.error("❌ Error sending mail to {}: {}", result.getEmail(), e.getMessage());
+                    log.error("Error sending mail to {}: {}", result.getEmail(), e.getMessage());
                     errors++;
                 }
             }
 
-            log.info("========================================");
-            log.info("✅ EMAIL SENDING COMPLETE");
-            log.info("   Passed (Score >= {}): {}", PASSING_SCORE, passed);
-            log.info("   Failed (Score < {}): {}", PASSING_SCORE, failed);
-            log.info("   Already Released: {}", alreadyReleased);
-            log.info("   Errors: {}", errors);
-            log.info("========================================");
-
             if (errors == results.size() && results.size() > 0) {
-                return ResponseEntity.ok(
-                        "⚠️ Email service not configured. Please check application.properties for SMTP settings.");
+                return ResponseEntity.ok("Email service not configured. Please check SMTP settings.");
             }
 
             return ResponseEntity.ok(
-                    String.format("✅ Emails sent! Pass: %d, Fail: %d, Already Released: %d, Errors: %d",
+                    String.format("Emails sent! Pass: %d, Fail: %d, Already Released: %d, Errors: %d",
                             passed, failed, alreadyReleased, errors));
-
         } catch (Exception e) {
-            log.error("❌ Error in automatic email sending", e);
+            log.error("Error in automatic email sending", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to send emails: " + e.getMessage());
         }
@@ -396,47 +319,29 @@ public class ResultController {
     public ResponseEntity<?> deleteResult(@PathVariable Long id) {
         try {
             Optional<Result> result = resultRepository.findById(id);
-
             if (result.isEmpty()) {
-                log.warn("⚠️ Result not found: {}", id);
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Result not found with ID: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(errorResponse);
+                        .body(Map.of("error", "Result not found with ID: " + id));
             }
 
             resultRepository.deleteById(id);
-
-            log.info("✅ Result deleted successfully: {}", id);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Deleted result with ID: " + id);
-
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Deleted result with ID: " + id));
         } catch (Exception e) {
-            log.error("❌ Error deleting result {}", id, e);
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to delete result: " + e.getMessage());
+            log.error("Error deleting result {}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
+                    .body(Map.of("error", "Failed to delete result: " + e.getMessage()));
         }
     }
 
     @PutMapping("/results/{id}")
     public ResponseEntity<?> updateResult(@PathVariable Long id, @RequestBody Result updatedResult) {
         try {
-            log.info("📝 Updating result: {}", id);
-
             Optional<Result> existingResult = resultRepository.findById(id);
-
             if (existingResult.isEmpty()) {
-                log.warn("⚠️ Result not found: {}", id);
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Result not found with ID: " + id);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(errorResponse);
+                        .body(Map.of("error", "Result not found with ID: " + id));
             }
 
             Result result = existingResult.get();
@@ -444,35 +349,27 @@ public class ResultController {
             result.setEmail(updatedResult.getEmail());
             result.setCollegeName(updatedResult.getCollegeName());
             result.setScore(updatedResult.getScore());
-            result.setStatus(updatedResult.getStatus());
 
             if (updatedResult.getExam() != null) {
                 result.setExam(updatedResult.getExam());
             }
 
-            // Update slot if provided
             if (updatedResult.getSlot() != null && updatedResult.getSlot().getId() != null) {
                 Optional<Slot> slot = slotRepository.findById(updatedResult.getSlot().getId());
                 slot.ifPresent(result::setSlot);
             }
 
+            result.setStatus(resultService.evaluatePassFailStatus(result));
             resultRepository.save(result);
 
-            log.info("✅ Result updated successfully: {}", id);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Result updated successfully");
-            response.put("result", result);
-
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Result updated successfully",
+                    "result", result));
         } catch (Exception e) {
-            log.error("❌ Error updating result {}", id, e);
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to update result: " + e.getMessage());
+            log.error("Error updating result {}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(errorResponse);
+                    .body(Map.of("error", "Failed to update result: " + e.getMessage()));
         }
     }
 }

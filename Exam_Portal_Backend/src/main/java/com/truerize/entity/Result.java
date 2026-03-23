@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Transient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
@@ -34,6 +35,15 @@ public class Result {
     @JoinColumn(name = "slot_id")
     @JsonIgnoreProperties({"users", "results"})
     private Slot slot;
+
+    @Transient
+    private Integer candidateId;
+
+    @Transient
+    private Integer examId;
+
+    @Transient
+    private Double scorePercentage;
     
     public Result() {}
   
@@ -70,4 +80,13 @@ public class Result {
     
     public Slot getSlot() { return slot; }
     public void setSlot(Slot slot) { this.slot = slot; }
+
+    public Integer getCandidateId() { return candidateId; }
+    public void setCandidateId(Integer candidateId) { this.candidateId = candidateId; }
+
+    public Integer getExamId() { return examId; }
+    public void setExamId(Integer examId) { this.examId = examId; }
+
+    public Double getScorePercentage() { return scorePercentage; }
+    public void setScorePercentage(Double scorePercentage) { this.scorePercentage = scorePercentage; }
 }

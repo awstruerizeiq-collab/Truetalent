@@ -1,9 +1,17 @@
 import axios from "axios";
 import logger from "../utils/logger";
 
+const normalizeBaseUrl = (value) => {
+  const raw = (value || "/api").trim();
+  const first = raw.split(",")[0].trim();
+  if (!first) return "/api";
+  return first.replace(/\/+$/, "");
+};
+
+const apiBaseUrl = normalizeBaseUrl(process.env.REACT_APP_API_BASE_URL);
 
 const axiosInstance = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || "/api",
+  baseURL: apiBaseUrl,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",

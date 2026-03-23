@@ -32,59 +32,97 @@ const Notification = ({ message, type, onClose }) => {
   );
 };
 
+const normalizeResultStatus = (status) => {
+  const value = (status || "").toLowerCase();
+  if (value === "pass" || value === "passed") return "Pass";
+  if (value === "fail" || value === "failed") return "Fail";
+  if (value === "result released") return "Result Released";
+  if (value === "completed") return "Completed";
+  return status || "Completed";
+};
+
+const formatPercent = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+  return `${value}%`;
+};
+
 const DetailsModal = ({ result, onClose }) => {
   if (!result) return null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="p-6 border-b">
           <h2 className="text-2xl font-bold text-gray-800">
-            Exam Details: {result.name}
+            Answer Sheet: {result.candidateName || result.name || "Candidate"}
           </h2>
           <p className="text-gray-600">
-            Exam: <span className="font-semibold">{result.exam}</span>
+            Exam: <span className="font-semibold">{result.exam || "-"}</span>
           </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-sm">
+            <div className="bg-gray-50 rounded p-2">
+              <span className="text-gray-500">Score</span>
+              <p className="font-semibold">{result.score ?? "-"}</p>
+            </div>
+            <div className="bg-gray-50 rounded p-2">
+              <span className="text-gray-500">Pass %</span>
+              <p className="font-semibold">{formatPercent(result.scorePercentage)}</p>
+            </div>
+            <div className="bg-gray-50 rounded p-2">
+              <span className="text-gray-500">Attempted</span>
+              <p className="font-semibold">
+                {result.attemptedQuestions ?? 0}/{result.totalQuestions ?? 0}
+              </p>
+            </div>
+            <div className="bg-gray-50 rounded p-2">
+              <span className="text-gray-500">Correct</span>
+              <p className="font-semibold">{result.correctAnswers ?? 0}</p>
+            </div>
+          </div>
         </div>
         <div className="p-6 overflow-y-auto">
-          {result.details && result.details.length > 0 ? (
+          {result.questions && result.questions.length > 0 ? (
             <div className="space-y-4">
-              {result.details.map((detail, idx) => (
+              {result.questions.map((detail, idx) => (
                 <div
-                  key={idx}
-                  className={`p-4 rounded-lg ${detail.result === "Correct"
-                      ? "bg-green-50 border-green-200"
-                      : "bg-red-50 border-red-200"
-                    } border`}
+                  key={detail.questionId || idx}
+                  className={`p-4 rounded-lg border ${detail.result === "Correct"
+                    ? "bg-green-50 border-green-200"
+                    : detail.result === "Incorrect"
+                      ? "bg-red-50 border-red-200"
+                      : "bg-gray-50 border-gray-200"
+                    }`}
                 >
                   <p className="font-semibold text-gray-800 mb-2">
-                    Q{idx + 1}: {detail.question}
+                    Q{detail.qNo || idx + 1}: {detail.question}
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Your Answer:{" "}
-                    <span className="font-medium">{detail.yourAnswer}</span>
+                  <p className="text-sm text-gray-700">
+                    Your Answer: <span className="font-medium">{detail.selectedAnswer || "-"}</span>
                   </p>
-                  {detail.result === "Incorrect" && (
-                    <p className="text-sm text-green-700">
-                      Correct Answer:{" "}
-                      <span className="font-medium">
-                        {detail.correctAnswer}
-                      </span>
-                    </p>
-                  )}
+                  <p className="text-sm text-green-700">
+                    Correct Answer: <span className="font-medium">{detail.correctAnswer || "-"}</span>
+                  </p>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Marks: {detail.marks ?? 0}
+                  </div>
                   <p
                     className={`text-right font-bold text-sm ${detail.result === "Correct"
-                        ? "text-green-600"
-                        : "text-red-600"
+                      ? "text-green-700"
+                      : detail.result === "Incorrect"
+                        ? "text-red-700"
+                        : "text-gray-600"
                       }`}
                   >
-                    {detail.result}
+                    {detail.result || "-"}
                   </p>
                 </div>
               ))}
             </div>
           ) : (
             <p className="text-gray-500 text-center">
-              No detailed answer breakdown available for this result.
+              No answer sheet data available for this candidate.
             </p>
           )}
         </div>
@@ -249,16 +287,20 @@ const SlotWiseView = ({ slotsData, onViewSlot, loading }) => {
                   <span className="text-gray-600">Pass Rate:</span>
                   <span className="font-bold text-purple-700">{slotData.passPercentage}%</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Pass Threshold:</span>
+                  <span className="font-bold text-indigo-700">{slotData.slotPassPercentage ?? 80}%</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-4">
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-green-700">{slotData.passedCount}</p>
-                  <p className="text-xs text-gray-600">Passed</p>
+                  <p className="text-xs text-gray-600">Pass</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-red-700">{slotData.failedCount}</p>
-                  <p className="text-xs text-gray-600">Failed</p>
+                  <p className="text-xs text-gray-600">Fail</p>
                 </div>
               </div>
 
@@ -302,6 +344,8 @@ export default function Results() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [slotLoading, setSlotLoading] = useState(false);
+  const [viewAnswerSheetLoadingId, setViewAnswerSheetLoadingId] = useState(null);
+  const [downloadAnswerSheetLoadingId, setDownloadAnswerSheetLoadingId] = useState(null);
 
   const fetchResults = async (slotNumber = null) => {
     try {
@@ -405,7 +449,7 @@ export default function Results() {
           result.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           result.collegeName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
         (examFilter === "All" || result.exam === examFilter) &&
-        (statusFilter === "All" || result.status === statusFilter) &&
+        (statusFilter === "All" || normalizeResultStatus(result.status) === statusFilter) &&
         (slotFilter === "All" || (result.slot && result.slot.slotNumber === parseInt(slotFilter)))
     );
     
@@ -644,9 +688,125 @@ export default function Results() {
   const goToPage = (page) =>
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
 
-  const handleViewDetails = (result) => {
-    setSelectedResultDetails(result);
-    setIsDetailsModalOpen(true);
+  const resolveAnswerSheetContext = (result) => {
+    const candidateId = result?.candidateId;
+    const examId = result?.examId;
+    const slotId = result?.slot?.id;
+
+    if (!candidateId || !examId) {
+      return null;
+    }
+
+    return { candidateId, examId, slotId };
+  };
+
+  const extractServerErrorMessage = (error, fallbackMessage) => {
+    const errorData = error?.response?.data;
+    if (typeof errorData === "string" && errorData.trim()) return errorData;
+    if (errorData?.error) return errorData.error;
+    if (errorData?.message) return errorData.message;
+    return fallbackMessage;
+  };
+
+  const getFileNameFromDisposition = (disposition, fallbackName) => {
+    if (!disposition) return fallbackName;
+    const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+
+    const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    if (match?.[1]) return match[1];
+    return fallbackName;
+  };
+
+  const handleViewDetails = async (result) => {
+    const context = resolveAnswerSheetContext(result);
+    if (!context) {
+      setNotification({
+        message: "Answer sheet cannot be opened because candidateId/examId is missing for this row.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setViewAnswerSheetLoadingId(result.id);
+      const params = context.slotId ? { slotId: context.slotId } : {};
+      const response = await axios.get(
+        `/admin/answersheet/${context.candidateId}/${context.examId}`,
+        { withCredentials: true, params }
+      );
+
+      setSelectedResultDetails(response.data);
+      setIsDetailsModalOpen(true);
+    } catch (err) {
+      setNotification({
+        message: extractServerErrorMessage(err, "Failed to fetch answer sheet"),
+        type: "error",
+      });
+    } finally {
+      setViewAnswerSheetLoadingId(null);
+    }
+  };
+
+  const handleDownloadAnswerSheet = async (result) => {
+    const context = resolveAnswerSheetContext(result);
+    if (!context) {
+      setNotification({
+        message: "Answer sheet cannot be downloaded because candidateId/examId is missing for this row.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setDownloadAnswerSheetLoadingId(result.id);
+      const params = context.slotId ? { slotId: context.slotId } : {};
+      const response = await axios.get(
+        `/admin/answersheet/download/${context.candidateId}/${context.examId}`,
+        {
+          withCredentials: true,
+          params,
+          responseType: "blob",
+        }
+      );
+
+      const fallbackName = `answer_sheet_${context.candidateId}_${context.examId}.xlsx`;
+      const filename = getFileNameFromDisposition(
+        response.headers["content-disposition"],
+        fallbackName
+      );
+
+      const blob = new Blob([response.data], {
+        type: response.headers["content-type"] || "application/octet-stream",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setNotification({ message: "Answer sheet downloaded successfully", type: "success" });
+    } catch (err) {
+      let message = "Failed to download answer sheet";
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          message = json?.error || json?.message || message;
+        } catch (parseError) {
+          message = "Failed to download answer sheet";
+        }
+      } else {
+        message = extractServerErrorMessage(err, message);
+      }
+
+      setNotification({ message, type: "error" });
+    } finally {
+      setDownloadAnswerSheetLoadingId(null);
+    }
   };
 
   const handleEditSelected = () => {
@@ -825,8 +985,8 @@ export default function Results() {
               <option value="All">All Statuses</option>
               <option value="Completed">Completed</option>
               <option value="Result Released">Result Released</option>
-              <option value="Passed">Passed</option>
-              <option value="Failed">Failed</option>
+              <option value="Pass">Pass</option>
+              <option value="Fail">Fail</option>
             </select>
             <select
               value={slotFilter}
@@ -899,6 +1059,7 @@ export default function Results() {
                     <th className="py-4 px-6 text-center cursor-pointer" onClick={() => requestSort("score")}>
                       Score {getSortIndicator("score")}
                     </th>
+                    <th className="py-4 px-6 text-center">Pass %</th>
                     <th className="py-4 px-6 text-center">Status</th>
                     <th className="py-4 px-6 text-center">Actions</th>
                   </tr>
@@ -906,7 +1067,7 @@ export default function Results() {
                 <tbody className="text-gray-700 text-sm font-light">
                   {paginatedResults.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="py-8 text-center text-gray-500">
+                      <td colSpan="11" className="py-8 text-center text-gray-500">
                         {selectedSlotNumber 
                           ? `No results found for Slot ${selectedSlotNumber}`
                           : "No results found"
@@ -914,7 +1075,9 @@ export default function Results() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedResults.map((r) => (
+                    paginatedResults.map((r) => {
+                      const normalizedStatus = normalizeResultStatus(r.status);
+                      return (
                       <tr
                         key={r.id}
                         className={`border-b border-gray-200 transition-colors ${selectedResults.includes(r.id)
@@ -946,32 +1109,44 @@ export default function Results() {
                         <td className="py-4 px-6 text-center font-semibold text-blue-700">
                           {r.score}
                         </td>
+                        <td className="py-4 px-6 text-center font-semibold text-indigo-700">
+                          {formatPercent(r.scorePercentage)}
+                        </td>
                         <td className="py-4 px-6 text-center">
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${r.status === "Result Released"
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${normalizedStatus === "Result Released"
                                 ? "bg-blue-100 text-blue-800"
-                                : r.status === "Passed"
+                                : normalizedStatus === "Pass"
                                   ? "bg-green-100 text-green-800"
-                                  : r.status === "Failed"
+                                  : normalizedStatus === "Fail"
                                     ? "bg-red-100 text-red-800"
                                     : "bg-yellow-100 text-yellow-800"
                               }`}
                           >
-                            {r.status}
+                            {normalizedStatus}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
                           <div className="flex items-center justify-center space-x-2">
                             <button
                               onClick={() => handleViewDetails(r)}
-                              className="text-purple-600 hover:text-purple-800 font-semibold text-xs"
-                              title="View Details"
+                              disabled={viewAnswerSheetLoadingId === r.id}
+                              className="bg-purple-600 text-white font-bold py-1 px-3 text-xs rounded-lg shadow-md hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                              title="View Answer Sheet"
                             >
-                              Details
+                              {viewAnswerSheetLoadingId === r.id ? "Loading..." : "View Answer Sheet"}
+                            </button>
+                            <button
+                              onClick={() => handleDownloadAnswerSheet(r)}
+                              disabled={downloadAnswerSheetLoadingId === r.id}
+                              className="bg-indigo-600 text-white font-bold py-1 px-3 text-xs rounded-lg shadow-md hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                              title="Download Answer Sheet"
+                            >
+                              {downloadAnswerSheetLoadingId === r.id ? "Downloading..." : "Download Answer Sheet"}
                             </button>
                             <button
                               onClick={() => handleReleaseResult(r.id)}
-                              disabled={r.status === "Result Released"}
+                              disabled={normalizedStatus === "Result Released"}
                               className="bg-blue-600 text-white font-bold py-1 px-3 text-xs rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                               title="Release Result"
                             >
@@ -987,7 +1162,7 @@ export default function Results() {
                           </div>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>

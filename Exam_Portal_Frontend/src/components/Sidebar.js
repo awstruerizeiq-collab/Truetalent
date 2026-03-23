@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 
 function Sidebar() {
@@ -67,12 +67,18 @@ function Sidebar() {
         <ul>
           {navItems.map((item) => (
             <li key={item.name} className="mb-2">
-              <a
-                href={item.path}
-                className="flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ease-in-out text-gray-300 hover:bg-slate-700 hover:text-white font-medium"
+              <NavLink
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ease-in-out font-medium ${
+                    isActive
+                      ? "bg-slate-700 text-white"
+                      : "text-gray-300 hover:bg-slate-700 hover:text-white"
+                  }`
+                }
               >
                 <span>{item.name}</span>
-              </a>
+              </NavLink>
             </li>
           ))}
         </ul>

@@ -62,11 +62,12 @@ export default function ManageUsers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
-  const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '' });
+  const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '', passPercentage: '80' });
   const [isSlotSubmitting, setIsSlotSubmitting] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null);
   const [isExcelUploading, setIsExcelUploading] = useState(false);
   const excelFileInputRef = useRef(null);
+  const selectAllCheckboxRef = useRef(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -143,7 +144,7 @@ export default function ManageUsers() {
 
   const addNewSlot = () => {
     setEditingSlot(null);
-    setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '' });
+    setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '', passPercentage: '80' });
     setIsSlotModalOpen(true);
   };
 
@@ -154,14 +155,21 @@ export default function ManageUsers() {
       date: slot.date || '',
       time: slot.time || '',
       collegeName: slot.collegeName || '',
-      slotPassword: slot.slotPassword || ''
+      slotPassword: slot.slotPassword || '',
+      passPercentage: String(slot.passPercentage ?? 80)
     });
     setIsSlotModalOpen(true);
   };
 
   const handleCreateOrUpdateSlot = async () => {
-    if (!slotFormData.slotNumber || !slotFormData.date || !slotFormData.time || !slotFormData.slotPassword) {
-      setNotification({ message: 'Please fill in slot number, date, time, and slot password', type: 'error', persistent: false });
+    if (!slotFormData.slotNumber || !slotFormData.date || !slotFormData.time || !slotFormData.slotPassword || slotFormData.passPercentage === '') {
+      setNotification({ message: 'Please fill in slot number, date, time, slot password, and pass percentage', type: 'error', persistent: false });
+      return;
+    }
+
+    const passPercentage = parseInt(slotFormData.passPercentage, 10);
+    if (Number.isNaN(passPercentage) || passPercentage < 0 || passPercentage > 100) {
+      setNotification({ message: 'Pass percentage must be between 0 and 100', type: 'error', persistent: false });
       return;
     }
 
@@ -172,7 +180,8 @@ export default function ManageUsers() {
         date: slotFormData.date,
         time: slotFormData.time,
         collegeName: slotFormData.collegeName || null,
-        slotPassword: slotFormData.slotPassword
+        slotPassword: slotFormData.slotPassword,
+        passPercentage
       };
 
       if (editingSlot) {
@@ -481,15 +490,35 @@ export default function ManageUsers() {
     if (selectedUser && isAdminUser(selectedUser)) return;
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
-  const handleSelectAllOnPage = (e) => {
-    const pageIds = paginatedUsers.filter(u => !isAdminUser(u)).map(u=>u.id);
-    if(e.target.checked) setSelectedUsers(prev=>[...new Set([...prev, ...pageIds])]);
-    else setSelectedUsers(prev=>prev.filter(id=>!pageIds.includes(id)));
+  const handleSelectAllAcrossPages = (e) => {
+    const filteredIds = sortedAndFilteredUsers.filter(u => !isAdminUser(u)).map(u => u.id);
+    if (e.target.checked) {
+      setSelectedUsers(prev => [...new Set([...prev, ...filteredIds])]);
+    } else {
+      setSelectedUsers(prev => prev.filter(id => !filteredIds.includes(id)));
+    }
   };
-  const selectableUsersOnPage = paginatedUsers.filter(u => !isAdminUser(u));
-  const areAllOnPageSelected =
-    selectableUsersOnPage.length > 0 &&
-    selectableUsersOnPage.every(u => selectedUsers.includes(u.id));
+
+  const selectableUsersAcrossPages = useMemo(
+    () => sortedAndFilteredUsers.filter(u => !isAdminUser(u)),
+    [sortedAndFilteredUsers]
+  );
+  const selectableUserIdsAcrossPages = useMemo(
+    () => selectableUsersAcrossPages.map(u => u.id),
+    [selectableUsersAcrossPages]
+  );
+  const areAllAcrossPagesSelected =
+    selectableUserIdsAcrossPages.length > 0 &&
+    selectableUserIdsAcrossPages.every(id => selectedUsers.includes(id));
+  const areSomeAcrossPagesSelected =
+    selectableUserIdsAcrossPages.some(id => selectedUsers.includes(id)) &&
+    !areAllAcrossPagesSelected;
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = areSomeAcrossPagesSelected;
+    }
+  }, [areSomeAcrossPagesSelected]);
 
   const handleSlotChange = (slotId) => {
     setCurrentSlotId(slotId);
@@ -606,6 +635,12 @@ export default function ManageUsers() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             {formatTime(slot.time)}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-600">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6a3 3 0 016 0v6m-8 0h10" />
+                            </svg>
+                            Pass: {slot.passPercentage ?? 80}%
                           </div>
                         </div>
                       )}
@@ -745,7 +780,14 @@ export default function ManageUsers() {
               <thead className="bg-gray-200 text-gray-700 uppercase text-sm">
                 <tr>
                   <th className="py-3 px-4 text-left">
-                    <input type="checkbox" onChange={handleSelectAllOnPage} checked={areAllOnPageSelected} className="cursor-pointer"/>
+                    <input
+                      ref={selectAllCheckboxRef}
+                      type="checkbox"
+                      onChange={handleSelectAllAcrossPages}
+                      checked={areAllAcrossPagesSelected}
+                      className="cursor-pointer"
+                      title="Select all users across all pages"
+                    />
                   </th>
                   <th className="py-3 px-4 text-left">Sl No.</th>
                   <th className="py-3 px-4 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('id')}>
@@ -1074,6 +1116,22 @@ export default function ManageUsers() {
                 <p className="text-xs text-gray-500 mt-1">
                   This password will be assigned to users created from Excel upload for this slot.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Pass Percentage *
+                </label>
+                <input
+                  type="number"
+                  placeholder="Enter pass percentage (0-100)"
+                  value={slotFormData.passPercentage}
+                  onChange={e=>setSlotFormData({...slotFormData, passPercentage:e.target.value})}
+                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                  max="100"
+                  required
+                />
               </div>
               
               <div>

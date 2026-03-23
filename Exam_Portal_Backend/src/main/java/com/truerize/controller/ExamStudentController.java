@@ -4,6 +4,8 @@ package com.truerize.controller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +19,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truerize.entity.Question;
+import com.truerize.entity.StudentExamAssignment;
+import com.truerize.entity.User;
+import com.truerize.repository.StudentExamAssignmentRepo;
+import com.truerize.repository.UserRepository;
 import com.truerize.service.ExamSetService;
+import com.truerize.service.ExamService;
 
 import jakarta.servlet.http.HttpSession;
 
@@ -31,6 +38,128 @@ public class ExamStudentController {
     @Autowired
     private ExamSetService examSetService;
 
+    @Autowired
+    private StudentExamAssignmentRepo studentExamAssignmentRepo;
+
+    @Autowired
+    private ExamService examService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @GetMapping("/exam-context")
+    public ResponseEntity<?> getExamContext(HttpSession session) {
+        try {
+            Object userIdObj = session.getAttribute("userId");
+            if (userIdObj == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(errorResponse("Not authenticated"));
+            }
+
+            String studentId = String.valueOf(userIdObj);
+            Integer studentIdInt;
+            try {
+                studentIdInt = Integer.valueOf(studentId);
+            } catch (NumberFormatException ex) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(errorResponse("Invalid candidate session"));
+            }
+
+            Integer currentExamId = safeInteger(session.getAttribute("currentExamId"));
+
+            Optional<StudentExamAssignment> assignmentOpt = Optional.empty();
+
+            if (currentExamId != null) {
+                assignmentOpt = studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, currentExamId);
+                if (assignmentOpt.isPresent() && Boolean.TRUE.equals(assignmentOpt.get().getHasCompleted())) {
+                    assignmentOpt = Optional.empty();
+                }
+            }
+
+            if (assignmentOpt.isEmpty()) {
+                assignmentOpt = studentExamAssignmentRepo
+                        .findTopByStudentIdAndHasStartedTrueAndHasCompletedFalseOrderByAssignedAtDesc(studentId);
+            }
+
+            if (assignmentOpt.isEmpty()) {
+                assignmentOpt = studentExamAssignmentRepo
+                        .findTopByStudentIdAndHasCompletedFalseOrderByAssignedAtDesc(studentId);
+            }
+
+            Integer resolvedExamId = null;
+            if (assignmentOpt.isPresent()) {
+                resolvedExamId = assignmentOpt.get().getExamId();
+            } else {
+                Optional<User> userOpt = userRepository.findByIdWithExams(studentIdInt);
+                if (userOpt.isPresent()) {
+                    User user = userOpt.get();
+                    if (user.getAssignedExams() != null && !user.getAssignedExams().isEmpty()) {
+                        if (currentExamId != null && user.getAssignedExams().stream()
+                                .anyMatch(exam -> Objects.equals(exam.getId(), currentExamId))) {
+                            resolvedExamId = currentExamId;
+                        } else {
+                            resolvedExamId = user.getAssignedExams().stream()
+                                    .map(exam -> exam.getId())
+                                    .filter(Objects::nonNull)
+                                    .max(Integer::compareTo)
+                                    .orElse(null);
+                        }
+                    }
+                }
+
+                if (resolvedExamId != null) {
+                    assignmentOpt = studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, resolvedExamId);
+                    if (assignmentOpt.isEmpty()) {
+                        Map<String, Object> autoAssignResult = examSetService.autoAssignStudentToSet(
+                                studentId,
+                                resolvedExamId.longValue());
+                        if (!Boolean.TRUE.equals(autoAssignResult.get("success"))) {
+                            log.warn("Auto-assign failed for student {} exam {}: {}", studentId, resolvedExamId,
+                                    autoAssignResult.get("error"));
+                        }
+                        assignmentOpt = studentExamAssignmentRepo.findByStudentIdAndExamId(studentId, resolvedExamId);
+                    }
+                }
+            }
+
+            if (resolvedExamId == null && assignmentOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(errorResponse("No exam assignment found for this candidate"));
+            }
+
+            Integer examId = resolvedExamId != null ? resolvedExamId : assignmentOpt.get().getExamId();
+            session.setAttribute("currentExamId", examId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("examId", examId);
+            response.put("studentId", studentId);
+
+            if (assignmentOpt.isPresent()) {
+                StudentExamAssignment assignment = assignmentOpt.get();
+                response.put("assignedSetNumber", assignment.getAssignedSetNumber());
+                response.put("slotNumber", assignment.getSlotNumber());
+                response.put("hasStarted", assignment.getHasStarted());
+                response.put("hasCompleted", assignment.getHasCompleted());
+            } else {
+                response.put("assignedSetNumber", null);
+                response.put("slotNumber", null);
+                response.put("hasStarted", false);
+                response.put("hasCompleted", false);
+            }
+
+            examService.findExam(examId).ifPresent(exam -> {
+                response.put("examTitle", exam.getTitle());
+                response.put("duration", exam.getDuration());
+            });
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("❌ Error fetching exam context", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse("Failed to fetch exam context"));
+        }
+    }
+
     @GetMapping("/exams/{examId}/shuffled-questions")
     public ResponseEntity<?> getShuffledQuestions(
             @PathVariable String examId,
@@ -43,7 +172,7 @@ public class ExamStudentController {
             if (userIdObj == null) {
                 log.error("❌ No user in session");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Not authenticated. Please login first."));
+                    .body(errorResponse("Not authenticated. Please login first."));
             }
             
             String studentId = String.valueOf(userIdObj);
@@ -53,12 +182,23 @@ public class ExamStudentController {
             log.info(" Exam ID: {}", examIdLong);
             
            
-            var assignment = examSetService.getStudentAssignment(studentId, examIdLong);
+            Optional<StudentExamAssignment> assignment = examSetService.getStudentAssignment(studentId, examIdLong);
+
+            if (assignment.isEmpty()) {
+                log.info("No set assignment for student {} exam {}. Attempting auto-assignment.",
+                        studentId, examIdLong);
+                Map<String, Object> autoAssignResult = examSetService.autoAssignStudentToSet(studentId, examIdLong);
+                if (!Boolean.TRUE.equals(autoAssignResult.get("success"))) {
+                    log.warn("Auto-assignment failed for student {} exam {}: {}",
+                            studentId, examIdLong, autoAssignResult.get("error"));
+                }
+                assignment = examSetService.getStudentAssignment(studentId, examIdLong);
+            }
             
             if (assignment.isEmpty()) {
                 log.error("❌ Student not assigned to exam {}", examIdLong);
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "You are not assigned to this exam. Please contact administrator."));
+                    .body(errorResponse("You are not assigned to this exam. Please contact administrator."));
             }
             
             log.info("✅ Student is assigned to Set {}", assignment.get().getAssignedSetNumber());
@@ -77,7 +217,7 @@ public class ExamStudentController {
             if (questions == null || questions.isEmpty()) {
                 log.error("❌ No questions returned from ExamSetService");
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "No questions found for your assigned set. Please contact administrator."));
+                    .body(errorResponse("No questions found for your assigned set. Please contact administrator."));
             }
             
             log.info("✅ Returning {} shuffled questions", questions.size());
@@ -89,17 +229,17 @@ public class ExamStudentController {
         } catch (NumberFormatException e) {
             log.error("❌ Invalid exam ID format: {}", examId);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "Invalid exam ID format"));
+                .body(errorResponse("Invalid exam ID format"));
                 
         } catch (IllegalStateException e) {
             log.error("❌ Error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", e.getMessage()));
+                .body(errorResponse(e.getMessage()));
                 
         } catch (Exception e) {
             log.error("❌ Error fetching shuffled questions", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to load questions: " + e.getMessage()));
+                .body(errorResponse("Failed to load questions: " + e.getMessage()));
         }
     }
 
@@ -113,20 +253,20 @@ public class ExamStudentController {
             
             if (userIdObj == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Not authenticated"));
+                    .body(errorResponse("Not authenticated"));
             }
             
             String studentId = String.valueOf(userIdObj);
             Long examIdLong = Long.parseLong(examId);
             
-            var assignment = examSetService.getStudentAssignment(studentId, examIdLong);
+            Optional<StudentExamAssignment> assignment = examSetService.getStudentAssignment(studentId, examIdLong);
             
             if (assignment.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "Not assigned to this exam"));
+                    .body(errorResponse("Not assigned to this exam"));
             }
             
-            var data = assignment.get();
+            StudentExamAssignment data = assignment.get();
             
             Map<String, Object> response = new HashMap<>();
             response.put("examId", data.getExamId());
@@ -140,11 +280,11 @@ public class ExamStudentController {
             
         } catch (NumberFormatException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "Invalid exam ID format"));
+                .body(errorResponse("Invalid exam ID format"));
         } catch (Exception e) {
             log.error("❌ Error fetching assignment", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Failed to fetch assignment"));
+                .body(errorResponse("Failed to fetch assignment"));
         }
     }
 
@@ -166,7 +306,7 @@ public class ExamStudentController {
             String studentId = String.valueOf(userIdObj);
             Long examIdLong = Long.parseLong(examId);
             
-            var assignment = examSetService.getStudentAssignment(studentId, examIdLong);
+            Optional<StudentExamAssignment> assignment = examSetService.getStudentAssignment(studentId, examIdLong);
             
             if (assignment.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
@@ -175,7 +315,7 @@ public class ExamStudentController {
                 return ResponseEntity.ok(response);
             }
             
-            var data = assignment.get();
+            StudentExamAssignment data = assignment.get();
             
             if (data.getHasCompleted()) {
                 Map<String, Object> response = new HashMap<>();
@@ -199,6 +339,29 @@ public class ExamStudentController {
             errorResponse.put("reason", "Error checking access: " + e.getMessage());
             
             return ResponseEntity.ok(errorResponse);
+        }
+    }
+
+    private Map<String, Object> errorResponse(String message) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("error", message);
+        return response;
+    }
+
+    private Integer safeInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Integer) {
+            return (Integer) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.valueOf(value.toString());
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 }

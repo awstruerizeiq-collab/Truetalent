@@ -29,7 +29,7 @@ import com.truerize.repository.UserRepository;
 public class TestSubmissionService {
 
     private static final Logger log = LoggerFactory.getLogger(TestSubmissionService.class);
-    private static final int PASSING_SCORE = 20;
+    private static final int DEFAULT_PASSING_SCORE = 80;
 
     @Autowired
     private TestSubmissionRepository testSubmissionRepository;
@@ -81,14 +81,26 @@ public class TestSubmissionService {
         result.setEmail(user.getEmail());
         result.setExam(exam.getTitle());
         result.setScore(savedSubmission.getScore());
+
+        Integer totalMarks = exam.getTotalMarks();
+        if (totalMarks == null || totalMarks <= 0) {
+            List<Question> questions = questionRepository.findByExam_IdOrderByQNoAsc(exam.getId());
+            totalMarks = questions.stream()
+                    .mapToInt(q -> q.getMarks() == null ? 0 : q.getMarks())
+                    .sum();
+        }
+
+        Double scorePercentage = null;
+        if (totalMarks != null && totalMarks > 0) {
+            scorePercentage = Math.round((savedSubmission.getScore() * 100.0 / totalMarks) * 100.0) / 100.0;
+        }
+
+        result.setScorePercentage(scorePercentage);
         result.setSlot(userSlot); // 🔥 LINK RESULT TO SLOT
         
-        // Set status based on score
-        if (savedSubmission.getScore() >= PASSING_SCORE) {
-            result.setStatus("Passed");
-        } else {
-            result.setStatus("Failed");
-        }
+        int requiredPassPercentage = resolvePassPercentage(userSlot);
+        boolean passed = scorePercentage != null && scorePercentage >= requiredPassPercentage;
+        result.setStatus(passed ? "Pass" : "Fail");
 
         log.info("💾 Saving result: user={}, college={}, email={}, exam={}, score={}, slot={}",
                 user.getName(), user.getCollegeName(), user.getEmail(), 
@@ -99,6 +111,13 @@ public class TestSubmissionService {
         log.info("✅ Result saved successfully with Slot #{}", userSlot.getSlotNumber());
 
         return savedSubmission;
+    }
+
+    private int resolvePassPercentage(Slot slot) {
+        if (slot == null || slot.getPassPercentage() == null) {
+            return DEFAULT_PASSING_SCORE;
+        }
+        return slot.getPassPercentage();
     }
         
     public int calculateScore(TestSubmission submission) {

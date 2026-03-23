@@ -33,6 +33,9 @@ public class Slot {
     @Column(name = "slot_password")
     private String slotPassword;
 
+    @Column(name = "pass_percentage")
+    private Integer passPercentage = 80;
+
     @OneToMany(mappedBy = "slot", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"slot", "roles", "assignedExams", "proctoringRecords"})
     private Set<User> users = new HashSet<>();
@@ -74,6 +77,9 @@ public class Slot {
 
     public String getSlotPassword() { return slotPassword; }
     public void setSlotPassword(String slotPassword) { this.slotPassword = slotPassword; }
+
+    public Integer getPassPercentage() { return passPercentage; }
+    public void setPassPercentage(Integer passPercentage) { this.passPercentage = passPercentage; }
     
     public Set<User> getUsers() { return users; }
     public void setUsers(Set<User> users) { this.users = users; }
@@ -85,6 +91,7 @@ public class Slot {
     public String toString() {
         return "Slot{id=" + id + ", slotNumber=" + slotNumber + 
                ", collegeName='" + collegeName + "', date=" + date + ", time=" + time +
+               ", passPercentage=" + passPercentage +
                ", hasPassword=" + (slotPassword != null && !slotPassword.isBlank()) + '}';
     }
 }
