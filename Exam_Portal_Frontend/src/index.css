@@ -7,14 +7,17 @@
 
 /* ✅ Import Professional Web Font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 /* === Global Reset === */
 body,
 html {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
-  background-color: #f9fafb;
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(1000px 500px at 95% 0%, rgba(14, 165, 233, 0.12), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
   height: 100%;
   overflow: hidden;
   /* Prevent body scroll bounce */
@@ -35,6 +38,105 @@ html {
 a {
   text-decoration: none;
   color: inherit;
+}
+
+body.admin-dashboard-body {
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(1000px 500px at 95% 0%, rgba(99, 102, 241, 0.18), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  position: relative;
+}
+
+body.candidate-body {
+  background: radial-gradient(1000px 500px at 8% -8%, rgba(16, 185, 129, 0.12), transparent 60%),
+    radial-gradient(900px 400px at 95% 0%, rgba(59, 130, 246, 0.12), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+  position: relative;
+}
+
+body.login-page-body {
+  background: radial-gradient(900px 500px at 10% -15%, rgba(59, 130, 246, 0.2), transparent 60%),
+    radial-gradient(700px 400px at 90% 0%, rgba(14, 165, 233, 0.2), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+body.admin-dashboard-body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.admin-dashboard-body #root {
+  position: relative;
+  z-index: 1;
+}
+
+body.candidate-body #root {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes floatSlow {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(12px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.7s ease both;
+}
+
+.animate-float {
+  animation: floatSlow 10s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: floatSlow 16s ease-in-out infinite;
+}
+
+.anim-delay-100 {
+  animation-delay: 100ms;
+}
+
+.anim-delay-200 {
+  animation-delay: 200ms;
 }
 
 /* ------------------------------------------------------------------
@@ -59,13 +161,13 @@ a {
   display: flex;
   max-width: 1400px;
   width: 100%;
-  background: white;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 20px;
   margin: auto;
   height: 90vh;
-  box-shadow: 0 0 25px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 25px 60px -40px rgba(15, 23, 42, 0.6);
   overflow: hidden;
 }
 
@@ -75,10 +177,10 @@ a {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.9) 0%, rgba(239, 246, 255, 0.7) 100%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border-radius: 10px 0 0 10px;
+  border-radius: 20px 0 0 20px;
 }
 
 .logo {
@@ -151,10 +253,10 @@ h2 {
 
 .login-btn {
   padding: 12px;
-  background: linear-gradient(90deg, #6a11cb, #2575fc);
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
   color: white;
   border: none;
-  border-radius: 25px;
+  border-radius: 999px;
   font-size: 15px;
   cursor: pointer;
   font-weight: 600;

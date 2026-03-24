@@ -33,6 +33,14 @@ function ExamStart() {
   const verificationCanvasRef = useRef(null);
   const idCanvasRef = useRef(null);
 
+  useEffect(() => {
+    document.body.classList.remove("admin-dashboard-body", "login-page-body");
+    document.body.classList.add("candidate-body");
+    return () => {
+      document.body.classList.remove("candidate-body");
+    };
+  }, []);
+
   
   useEffect(() => {
     const getCurrentUser = async () => {

@@ -5,12 +5,14 @@ import truerizeLogo from "../../assets/images/Truerize_Logo.png";
 
 function CandidateNavbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 bg-white shadow-lg">
+    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/60 bg-white/80 px-8 py-4 shadow-[0_12px_30px_-20px_rgba(15,23,42,0.35)] backdrop-blur-sm">
       <div className="flex items-center space-x-4">
-        <img src={truerizeLogo} alt="Truerize Logo" className="h-16 w-16 object-contain" />
-        <div className="text-3xl font-bold text-blue-900 tracking-wide">Truerize Talent Portal</div>
+        <img src={truerizeLogo} alt="Truerize Logo" className="h-12 w-12 object-contain rounded-xl shadow-sm" />
+        <div className="text-2xl font-semibold text-slate-900 tracking-wide">Truerize Talent Portal</div>
       </div>
-      <div className="text-lg font-semibold text-gray-700">Candidate Dashboard</div>
+      <div className="inline-flex items-center rounded-full border border-emerald-200/70 bg-emerald-50/70 px-4 py-1 text-sm font-semibold text-emerald-700">
+        Candidate Dashboard
+      </div>
     </nav>
   );
 }
@@ -146,7 +148,7 @@ function CandidateExamPortal() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         <CandidateNavbar />
         <div className="pt-24 flex items-center justify-center min-h-[80vh]">
           <div className="text-center">
@@ -160,7 +162,7 @@ function CandidateExamPortal() {
 
   if (!exam) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         <CandidateNavbar />
         <div className="pt-24 text-center mt-20 text-red-600 text-lg">
           {loadError || "Failed to load exam. Please contact support."}
@@ -170,34 +172,34 @@ function CandidateExamPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <CandidateNavbar />
 
       <div className="pt-28 container mx-auto px-6 py-8 max-w-7xl">
         <div className="text-center mb-14 mt-6">
-          <h1 className="text-4xl font-bold text-gray-800 mb-3">Welcome to Talent Truerize Portal</h1>
-          <p className="text-lg text-gray-600">
+          <h1 className="text-4xl font-semibold text-slate-900 mb-3">Welcome to Talent Truerize Portal</h1>
+          <p className="text-lg text-slate-600">
             Please review the exam details and instructions carefully before proceeding
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+            <div className="bg-white/80 rounded-2xl shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] border border-white/70 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-cyan-500 p-6 text-white">
                 <h2 className="text-2xl font-bold text-white">{exam.title || "Assigned Exam"}</h2>
                 <p className="text-blue-100 mt-1">Online Assessment</p>
               </div>
 
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <div className="bg-white/90 border border-blue-100 rounded-xl p-4 text-center shadow-sm">
                     <div className="text-3xl font-bold text-blue-600 mb-1">{examStats.duration}</div>
-                    <div className="text-sm text-gray-600 font-medium">Minutes</div>
+                    <div className="text-sm text-slate-600 font-medium">Minutes</div>
                   </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <div className="bg-white/90 border border-blue-100 rounded-xl p-4 text-center shadow-sm">
                     <div className="text-3xl font-bold text-blue-600 mb-1">{examStats.totalQuestions}</div>
-                    <div className="text-sm text-gray-600 font-medium">Questions</div>
+                    <div className="text-sm text-slate-600 font-medium">Questions</div>
                   </div>
                 </div>
 
@@ -205,9 +207,9 @@ function CandidateExamPortal() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Exam Instructions</h3>
-              <ul className="space-y-2 ml-5 list-disc text-sm text-gray-600">
+            <div className="bg-white/80 rounded-2xl shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] border border-white/70 p-6">
+              <h3 className="text-xl font-semibold text-slate-900 mb-4">Exam Instructions</h3>
+              <ul className="space-y-2 ml-5 list-disc text-sm text-slate-600">
                 <li>Ensure a stable internet connection</li>
                 <li>Use only one device and do not refresh browser tabs</li>
                 <li>Allow camera/microphone and follow proctoring instructions</li>
@@ -217,21 +219,21 @@ function CandidateExamPortal() {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+            <div className="bg-white/80 rounded-2xl shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] border border-white/70 p-6">
               <button
                 onClick={handleStart}
                 disabled={!systemReady || !userId || !activeExamId}
-                className={`w-full py-4 px-6 rounded-lg font-semibold text-lg transition-all ${
+                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
                   systemReady && userId && activeExamId
-                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg hover:shadow-xl"
+                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
                 }`}
               >
                 {!userId ? "Loading..." : systemReady ? "Start Examination" : "Preparing System..."}
               </button>
             </div>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-gray-700">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-slate-700">
               <p>
                 <strong>Important Notice:</strong> Once started, the exam cannot be paused. Please ensure you have
                 sufficient time.

@@ -24,12 +24,16 @@ const Notification = ({ message, type, onClose, persistent }) => {
 
 const StatusBadge = ({ status }) => {
   const statusStyles = {
-    Active: 'bg-green-100 text-green-800',
-    Blocked: 'bg-red-100 text-red-800',
-    'Completed Exam': 'bg-blue-100 text-blue-800',
-    'Assigned Exam': 'bg-yellow-100 text-yellow-800',
+    Active: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+    Blocked: 'bg-red-50 text-red-700 ring-1 ring-red-100',
+    'Completed Exam': 'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
+    'Assigned Exam': 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
   };
-  return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[status] || 'bg-gray-100 text-gray-800'}`}>{status}</span>;
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyles[status] || 'bg-gray-100 text-gray-800'}`}>
+      {status}
+    </span>
+  );
 };
 
 export default function ManageUsers() {
@@ -124,6 +128,13 @@ export default function ManageUsers() {
     fetchSlots();
     fetchExams(); 
   }, [fetchUsers]);
+
+  useEffect(() => {
+    document.body.classList.add('admin-dashboard-body');
+    return () => {
+      document.body.classList.remove('admin-dashboard-body');
+    };
+  }, []);
 
   useEffect(() => {
     window.history.pushState(null, "", window.location.href);
@@ -546,7 +557,7 @@ export default function ManageUsers() {
   };
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
+    <div className="min-h-screen">
       <Notification 
         message={notification.message} 
         type={notification.type} 
@@ -554,13 +565,24 @@ export default function ManageUsers() {
         onClose={()=>setNotification({message:'',type:'', persistent: false})}
       />
       
-      <div className="mb-6">
-        <h2 className="text-4xl font-bold text-gray-800">Manage Users</h2>
-        <p className="text-gray-600 mt-2">View, edit, and manage all registered users</p>
-      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="relative overflow-hidden rounded-3xl border border-white/70 bg-white/80 backdrop-blur-sm shadow-[0_30px_80px_-50px_rgba(15,23,42,0.45)] p-6 sm:p-8">
+          <div className="pointer-events-none absolute -top-24 right-0 h-48 w-48 rounded-full bg-blue-200/40 blur-3xl"></div>
+          <div className="pointer-events-none absolute -bottom-24 -left-16 h-40 w-40 rounded-full bg-indigo-200/40 blur-3xl"></div>
+
+          <div className="relative z-10">
+            <div className="mb-6 sm:mb-8">
+              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200/60 bg-blue-50/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-700">
+                User management
+              </span>
+              <h2 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900">Manage Users</h2>
+              <p className="mt-2 text-sm sm:text-base text-slate-600">
+                View, edit, and manage all registered users across exam slots.
+              </p>
+            </div>
 
       {backendError && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-xl">
           <div className="flex items-start">
             <svg className="w-6 h-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
@@ -575,7 +597,7 @@ export default function ManageUsers() {
               </ul>
               <button 
                 onClick={fetchUsers}
-                className="mt-3 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-semibold"
+                className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
               >
                 Retry Connection
               </button>
@@ -584,14 +606,17 @@ export default function ManageUsers() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Exam Slots</h3>
+      <div className="mb-6 rounded-2xl border border-white/70 bg-white/80 p-6 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Exam Slots</h3>
+            <p className="text-xs text-slate-500">Create, edit, and manage slot schedules.</p>
+          </div>
           <button
             onClick={addNewSlot}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold flex items-center gap-2"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Slot
@@ -599,45 +624,46 @@ export default function ManageUsers() {
         </div>
         
         {slots.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-slate-500">
             <p>No slots available. Create your first slot to get started.</p>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-3">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {slots.map(slot => {
               const count = Array.isArray(allUsers) ? allUsers.filter(u => u.slotNumber === slot.slotNumber).length : 0;
               return (
                 <div
                   key={slot.id}
-                  className={`relative group border-2 rounded-lg p-4 cursor-pointer transition-all duration-200 ${
+                  className={`group relative cursor-pointer overflow-hidden rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                     currentSlotId === slot.id
-                      ? 'border-blue-600 bg-blue-50 shadow-md'
-                      : 'border-gray-300 bg-white hover:border-blue-400 hover:shadow'
+                      ? 'ring-2 ring-blue-200'
+                      : 'ring-1 ring-transparent'
                   }`}
                   onClick={() => handleSlotChange(slot.id)}
                 >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-400"></div>
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="font-bold text-lg">Slot {slot.slotNumber}</h4>
+                      <h4 className="text-lg font-semibold text-slate-900">Slot {slot.slotNumber}</h4>
                       {slot.collegeName && (
-                        <p className="text-sm text-gray-600 mt-1 font-medium">{slot.collegeName}</p>
+                        <p className="mt-1 text-sm font-medium text-slate-600">{slot.collegeName}</p>
                       )}
                       {slot.date && slot.time && (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="mt-3 space-y-1.5">
+                          <div className="flex items-center text-sm text-slate-600">
+                            <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             {formatDate(slot.date)}
                           </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="flex items-center text-sm text-slate-600">
+                            <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             {formatTime(slot.time)}
                           </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="flex items-center text-sm text-slate-600">
+                            <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6a3 3 0 016 0v6m-8 0h10" />
                             </svg>
                             Pass: {slot.passPercentage ?? 80}%
@@ -646,13 +672,13 @@ export default function ManageUsers() {
                       )}
                       <div className="mt-2">
                         <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                          currentSlotId === slot.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-700'
+                          currentSlotId === slot.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                         }`}>
                           {count} {count === 1 ? 'user' : 'users'}
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -661,7 +687,7 @@ export default function ManageUsers() {
                         className="text-blue-600 hover:text-blue-800"
                         title="Edit slot"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
@@ -673,7 +699,7 @@ export default function ManageUsers() {
                         className="text-red-500 hover:text-red-700"
                         title="Delete slot"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
@@ -686,37 +712,40 @@ export default function ManageUsers() {
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6 flex flex-wrap gap-4 items-center justify-between">
-        <input 
-          type="text" 
-          placeholder="Search by name, email, or college..." 
-          value={searchTerm} 
-          onChange={e=>setSearchTerm(e.target.value)} 
-          className="px-4 py-2 border rounded-lg flex-1 min-w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select 
-          value={statusFilter} 
-          onChange={e=>setStatusFilter(e.target.value)} 
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="All">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Blocked">Blocked</option>
-          <option value="Completed Exam">Completed Exam</option>
-          <option value="Assigned Exam">Assigned Exam</option>
-        </select>
-        <div className="flex gap-2">
+      <div className="mb-6 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
+        <div className="flex flex-wrap items-center gap-4 justify-between">
+          <div className="flex flex-1 flex-wrap gap-3">
+            <input 
+              type="text" 
+              placeholder="Search by name, email, or college..." 
+              value={searchTerm} 
+              onChange={e=>setSearchTerm(e.target.value)} 
+              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 bg-white/90 px-4 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select 
+              value={statusFilter} 
+              onChange={e=>setStatusFilter(e.target.value)} 
+              className="rounded-xl border border-slate-200 bg-white/90 px-4 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Blocked">Blocked</option>
+              <option value="Completed Exam">Completed Exam</option>
+              <option value="Assigned Exam">Assigned Exam</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
           {selectedUsers.length>0 && (
             <>
               <button 
                 onClick={handleBulkDelete} 
-                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-semibold"
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
               >
                 Delete ({selectedUsers.length})
               </button>
               <button 
                 onClick={openAssignExamModal} 
-                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition font-semibold"
+                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
               >
                 Assign Exam ({selectedUsers.length})
               </button>
@@ -725,7 +754,7 @@ export default function ManageUsers() {
           <button
             onClick={triggerExcelUpload}
             disabled={!currentSlotId || isExcelUploading}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             title={!currentSlotId ? "Please create a slot first" : "Upload users Excel for selected slot"}
           >
             {isExcelUploading ? 'Uploading...' : 'Upload Excel'}
@@ -733,7 +762,7 @@ export default function ManageUsers() {
           <button 
             onClick={()=>openModal()} 
             disabled={!currentSlotId}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             title={!currentSlotId ? "Please create a slot first" : ""}
           >
             + Add User
@@ -745,21 +774,22 @@ export default function ManageUsers() {
             className="hidden"
             onChange={handleExcelUpload}
           />
+          </div>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="bg-white rounded-lg shadow-xl p-12 text-center">
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-12 text-center shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Loading users...</p>
+          <p className="mt-4 text-slate-600">Loading users...</p>
         </div>
       ) : sortedAndFilteredUsers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-xl p-12 text-center">
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-12 text-center shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
           <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <h3 className="mt-4 text-lg font-semibold text-gray-700">No users found</h3>
-          <p className="mt-2 text-gray-500">
+          <h3 className="mt-4 text-lg font-semibold text-slate-700">No users found</h3>
+          <p className="mt-2 text-slate-500">
             {searchTerm || statusFilter !== 'All' 
               ? 'Try adjusting your search or filters' 
               : currentSlot ? `No users in Slot ${currentSlot.slotNumber} yet` : 'Please create a slot first'}
@@ -767,7 +797,7 @@ export default function ManageUsers() {
           {!searchTerm && statusFilter === 'All' && currentSlotId && (
             <button 
               onClick={()=>openModal()} 
-              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              className="mt-4 rounded-xl bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
             >
               Add First User
             </button>
@@ -775,9 +805,9 @@ export default function ManageUsers() {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-lg shadow-xl overflow-x-auto">
+          <div className="overflow-x-auto rounded-2xl border border-white/70 bg-white/80 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
             <table className="min-w-full">
-              <thead className="bg-gray-200 text-gray-700 uppercase text-sm">
+              <thead className="bg-slate-50/80 text-slate-500 uppercase text-xs tracking-wider">
                 <tr>
                   <th className="py-3 px-4 text-left">
                     <input
@@ -790,29 +820,29 @@ export default function ManageUsers() {
                     />
                   </th>
                   <th className="py-3 px-4 text-left">Sl No.</th>
-                  <th className="py-3 px-4 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('id')}>
+                  <th className="py-3 px-4 text-left cursor-pointer hover:bg-slate-100" onClick={()=>requestSort('id')}>
                     ID {sortConfig.key==='id' && (sortConfig.direction==='ascending'?'↑':'↓')}
                   </th>
-                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('name')}>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-slate-100" onClick={()=>requestSort('name')}>
                     Name {sortConfig.key==='name' && (sortConfig.direction==='ascending'?'↑':'↓')}
                   </th>
-                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('collegeName')}>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-slate-100" onClick={()=>requestSort('collegeName')}>
                     College {sortConfig.key==='collegeName' && (sortConfig.direction==='ascending'?'↑':'↓')}
                   </th>
-                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('email')}>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-slate-100" onClick={()=>requestSort('email')}>
                     Email {sortConfig.key==='email' && (sortConfig.direction==='ascending'?'↑':'↓')}
                   </th>
                   <th className="py-3 px-6 text-left">Password</th>
-                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-gray-300" onClick={()=>requestSort('status')}>
+                  <th className="py-3 px-6 text-left cursor-pointer hover:bg-slate-100" onClick={()=>requestSort('status')}>
                     Status {sortConfig.key==='status' && (sortConfig.direction==='ascending'?'↑':'↓')}
                   </th>
                   <th className="py-3 px-6 text-left">Assigned Exams</th>
                   <th className="py-3 px-6 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="text-gray-700 text-sm">
+              <tbody className="text-slate-700 text-sm">
                 {paginatedUsers.map((u, idx) => (
-                  <tr key={u.id} className="border-b hover:bg-gray-50 transition">
+                  <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4">
                       <input 
                         type="checkbox" 
@@ -861,25 +891,25 @@ export default function ManageUsers() {
             </table>
           </div>
 
-          <div className="flex justify-between items-center mt-4 bg-white p-4 rounded-lg shadow">
-            <span className="text-sm text-gray-700">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
+            <span className="text-sm text-slate-700">
               Showing <strong>{((currentPage-1)*ITEMS_PER_PAGE)+1}</strong> to <strong>{Math.min(currentPage*ITEMS_PER_PAGE, sortedAndFilteredUsers.length)}</strong> of <strong>{sortedAndFilteredUsers.length}</strong> users
             </span>
             <div className="flex gap-2">
               <button 
                 onClick={()=>setCurrentPage(p=>Math.max(1,p-1))} 
                 disabled={currentPage===1} 
-                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition font-semibold"
+                className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
               </button>
-              <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+              <span className="rounded-xl bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
                 Page {currentPage} of {totalPages}
               </span>
               <button 
                 onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))} 
                 disabled={currentPage===totalPages} 
-                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition font-semibold"
+                className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>
@@ -887,6 +917,10 @@ export default function ManageUsers() {
           </div>
         </>
       )}
+
+          </div>
+        </div>
+      </div>
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
