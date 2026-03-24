@@ -37,11 +37,11 @@ function Sidebar() {
   };
 
   return (
-    <div className="w-64 bg-slate-900 text-white flex flex-col h-full">
+    <div className="w-64 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col h-full border-r border-white/10">
     
-      <div className="p-6 text-2xl font-bold text-center border-b border-gray-700 flex-shrink-0">
+      <div className="p-6 text-2xl font-bold text-center border-b border-white/10 flex-shrink-0">
         <div className="flex items-center justify-center space-x-3">
-          <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
             <svg
               className="w-6 h-6 text-white"
               fill="none"
@@ -56,7 +56,7 @@ function Sidebar() {
               ></path>
             </svg>
           </div>
-          <span className="text-sm font-normal text-gray-400">
+          <span className="text-sm font-normal text-slate-300">
             Logged in as: Admin
           </span>
         </div>
@@ -70,10 +70,10 @@ function Sidebar() {
               <NavLink
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ease-in-out font-medium ${
+                  `flex items-center space-x-3 p-3 rounded-xl transition-all duration-200 ease-in-out font-medium ${
                     isActive
-                      ? "bg-slate-700 text-white"
-                      : "text-gray-300 hover:bg-slate-700 hover:text-white"
+                      ? "bg-white/10 text-white shadow-sm"
+                      : "text-slate-300 hover:bg-white/10 hover:text-white"
                   }`
                 }
               >
@@ -85,10 +85,10 @@ function Sidebar() {
       </nav>
 
       {}
-      <div className="p-4 border-t border-gray-700 mt-auto flex-shrink-0">
+      <div className="p-4 border-t border-white/10 mt-auto flex-shrink-0">
         <button
           onClick={handleLogout}
-          className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
+          className="w-full bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white font-semibold py-2 px-4 rounded-xl transition-colors shadow-sm"
         >
           Logout
         </button>

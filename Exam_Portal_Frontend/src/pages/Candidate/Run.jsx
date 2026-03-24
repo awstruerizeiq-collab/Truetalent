@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import axios from "../../api/axiosConfig";
 
@@ -23,6 +23,14 @@ const Run = () => {
     const [testCases, setTestCases] = useState([{ input: "1 2", expectedOutput: "3" }]);
     const [results, setResults] = useState([]);
     const [status, setStatus] = useState("");
+
+    useEffect(() => {
+        document.body.classList.remove("admin-dashboard-body", "login-page-body");
+        document.body.classList.add("candidate-body");
+        return () => {
+            document.body.classList.remove("candidate-body");
+        };
+    }, []);
 
     const addTestCase = () => {
         setTestCases([...testCases, { input: "", expectedOutput: "" }]);
@@ -61,12 +69,13 @@ const Run = () => {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
+        <div className="min-h-screen px-6 py-6">
+            <div className="max-w-6xl mx-auto space-y-4">
+            <div className="flex flex-wrap justify-between items-center gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)]">
                 <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    className="border p-1 rounded"
+                    className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                     <option value="cpp">C++</option>
                     <option value="java">Java</option>
@@ -74,50 +83,52 @@ const Run = () => {
                 </select>
                 <button
                     onClick={runCode}
-                    className="bg-blue-600 text-white px-4 py-2 rounded"
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                 >
                     Run Code
                 </button>
                 <button
                     onClick={addTestCase}
-                    className="bg-green-600 text-white px-4 py-2 rounded"
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 >
                     + Add Test Case
                 </button>
             </div>
 
-            <div style={{ height: "400px", border: "1px solid #ddd" }}>
-                <Editor
-                    language={language}
-                    value={code}
-                    onChange={(val) => setCode(val || "")}
-                />
+            <div className="rounded-2xl border border-white/70 bg-white/80 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] overflow-hidden">
+                <div style={{ height: "400px", borderBottom: "1px solid #e2e8f0" }}>
+                    <Editor
+                        language={language}
+                        value={code}
+                        onChange={(val) => setCode(val || "")}
+                    />
+                </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] space-y-2">
                 {testCases.map((tc, index) => (
                     <div key={index} className="flex gap-2 items-center">
                         <input
                             placeholder="Input"
                             value={tc.input}
                             onChange={(e) => updateTestCase(index, "input", e.target.value)}
-                            className="border p-1 rounded w-1/2"
+                            className="w-1/2 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <input
                             placeholder="Expected Output"
                             value={tc.expectedOutput}
                             onChange={(e) => updateTestCase(index, "expectedOutput", e.target.value)}
-                            className="border p-1 rounded w-1/2"
+                            className="w-1/2 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                 ))}
             </div>
 
-            <div className="space-y-2">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] space-y-2">
                 {results.map((r, index) => (
                     <div
                         key={index}
-                        className={`p-2 border rounded ${r.passed ? "bg-green-100" : "bg-red-100"}`}
+                        className={`p-3 border rounded-xl ${r.passed ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}
                     >
                         <p>
                             <strong>Test Case {index + 1}</strong> -{" "}
@@ -131,7 +142,8 @@ const Run = () => {
                 ))}
             </div>
 
-            <p>Status: {status}</p>
+            <p className="text-sm text-slate-600">Status: {status}</p>
+            </div>
         </div>
     );
 };

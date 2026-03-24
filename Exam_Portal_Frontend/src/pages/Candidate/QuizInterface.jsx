@@ -54,6 +54,14 @@ const QuizInterface = () => {
 
   const getStorageKey = (key) => `exam_${liveExamId}_${studentId}_${key}`;
 
+  useEffect(() => {
+    document.body.classList.remove("admin-dashboard-body", "login-page-body");
+    document.body.classList.add("candidate-body");
+    return () => {
+      document.body.classList.remove("candidate-body");
+    };
+  }, []);
+
   // Back button protection
   useEffect(() => {
     if (isSubmitted || showSuccessScreen) return;

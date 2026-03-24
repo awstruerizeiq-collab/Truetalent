@@ -347,6 +347,13 @@ export default function Results() {
   const [viewAnswerSheetLoadingId, setViewAnswerSheetLoadingId] = useState(null);
   const [downloadAnswerSheetLoadingId, setDownloadAnswerSheetLoadingId] = useState(null);
 
+  useEffect(() => {
+    document.body.classList.add('admin-dashboard-body');
+    return () => {
+      document.body.classList.remove('admin-dashboard-body');
+    };
+  }, []);
+
   const fetchResults = async (slotNumber = null) => {
     try {
       setLoading(true);
@@ -839,7 +846,13 @@ export default function Results() {
   };
 
   return (
-    <div className="p-8 bg-gray-50 min-h-full">
+    <div className="min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="relative overflow-hidden rounded-3xl border border-white/70 bg-white/80 backdrop-blur-sm shadow-[0_30px_80px_-50px_rgba(15,23,42,0.45)] p-6 sm:p-8">
+          <div className="pointer-events-none absolute -top-24 right-0 h-48 w-48 rounded-full bg-blue-200/40 blur-3xl"></div>
+          <div className="pointer-events-none absolute -bottom-24 -left-16 h-40 w-40 rounded-full bg-indigo-200/40 blur-3xl"></div>
+
+          <div className="relative z-10">
       <Notification
         message={notification.message}
         type={notification.type}
@@ -1199,6 +1212,9 @@ export default function Results() {
           </div>
         </>
       )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

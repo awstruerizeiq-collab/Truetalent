@@ -5,7 +5,7 @@ import Sidebar from "./Sidebar";
 const PageLayout = ({ children }) => {
   return (
     
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-transparent">
       
       {}
       <Sidebar />
