@@ -31,4 +31,8 @@ public interface ResultRepository extends JpaRepository<Result, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Result r WHERE r.slot.id = :slotId")
     int deleteBySlotId(@Param("slotId") Integer slotId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM Result r WHERE LOWER(r.email) = LOWER(:email)")
+    int deleteByEmailIgnoreCase(@Param("email") String email);
 }

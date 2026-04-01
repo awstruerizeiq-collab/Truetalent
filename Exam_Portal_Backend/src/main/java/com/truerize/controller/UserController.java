@@ -121,6 +121,10 @@ public class UserController {
                 "message", "User deleted successfully",
                 "userId", id
             ));
+        } catch (IllegalArgumentException e) {
+            log.error("Validation error deleting user with id: {}", id, e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             log.error("Error deleting user with id: {}", id, e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

@@ -39,8 +39,11 @@ import com.truerize.entity.Role;
 import com.truerize.entity.Slot;
 import com.truerize.entity.User;
 import com.truerize.repository.ExamRepository;
+import com.truerize.repository.ProctoringRepository;
+import com.truerize.repository.ResultRepository;
 import com.truerize.repository.RoleRepository;
 import com.truerize.repository.SlotRepository;
+import com.truerize.repository.TestSubmissionRepository;
 import com.truerize.repository.UserRepository;
 
 @Service
@@ -63,6 +66,15 @@ public class UserService {
 
     @Autowired
     private SlotRepository slotRepository;
+
+    @Autowired
+    private TestSubmissionRepository testSubmissionRepository;
+
+    @Autowired
+    private ProctoringRepository proctoringRepository;
+
+    @Autowired
+    private ResultRepository resultRepository;
 
     @Autowired
     private MailService mailService;
@@ -536,6 +548,27 @@ public class UserService {
         
         User user = userRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+
+        if (user.getEmail() != null && FixedAdminCredentials.EMAIL.equalsIgnoreCase(user.getEmail())) {
+            throw new IllegalArgumentException("Fixed admin user cannot be deleted");
+        }
+
+        int deletedSubmissions = testSubmissionRepository.deleteByUserId(id);
+        if (deletedSubmissions > 0) {
+            log.info("Deleted {} test submission(s) for user {}", deletedSubmissions, user.getEmail());
+        }
+
+        int deletedProctoringRecords = proctoringRepository.deleteByUserId(id);
+        if (deletedProctoringRecords > 0) {
+            log.info("Deleted {} proctoring record(s) for user {}", deletedProctoringRecords, user.getEmail());
+        }
+
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            int deletedResults = resultRepository.deleteByEmailIgnoreCase(user.getEmail());
+            if (deletedResults > 0) {
+                log.info("Deleted {} result record(s) for user {}", deletedResults, user.getEmail());
+            }
+        }
         
         userRepository.delete(user);
         log.info("✅ Deleted user: {}", user.getEmail());
