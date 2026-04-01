@@ -2,6 +2,43 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "/api";
+const SLOT_HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
+const SLOT_MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
+
+const parse24HourTime = (timeValue) => {
+  if (!timeValue) {
+    return { hour: '', minute: '', period: 'AM' };
+  }
+
+  const [rawHour = '00', rawMinute = '00'] = timeValue.split(':');
+  const hourNumber = Number(rawHour);
+
+  if (Number.isNaN(hourNumber)) {
+    return { hour: '', minute: '', period: 'AM' };
+  }
+
+  const period = hourNumber >= 12 ? 'PM' : 'AM';
+  const hour12 = hourNumber % 12 || 12;
+
+  return {
+    hour: String(hour12).padStart(2, '0'),
+    minute: String(rawMinute).padStart(2, '0'),
+    period
+  };
+};
+
+const format12HourTo24Hour = ({ hour, minute, period }) => {
+  if (!hour || minute === '' || !period) {
+    return '';
+  }
+
+  let normalizedHour = Number(hour) % 12;
+  if (period === 'PM') {
+    normalizedHour += 12;
+  }
+
+  return `${String(normalizedHour).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`;
+};
 
 const Notification = ({ message, type, onClose, persistent }) => {
   useEffect(() => {
@@ -67,6 +104,7 @@ export default function ManageUsers() {
   const [isLoading, setIsLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
   const [slotFormData, setSlotFormData] = useState({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '', passPercentage: '80' });
+  const [slotTimeInput, setSlotTimeInput] = useState({ hour: '', minute: '', period: 'AM' });
   const [isSlotSubmitting, setIsSlotSubmitting] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null);
   const [isExcelUploading, setIsExcelUploading] = useState(false);
@@ -156,11 +194,13 @@ export default function ManageUsers() {
   const addNewSlot = () => {
     setEditingSlot(null);
     setSlotFormData({ slotNumber: '', date: '', time: '', collegeName: '', slotPassword: '', passPercentage: '80' });
+    setSlotTimeInput({ hour: '', minute: '', period: 'AM' });
     setIsSlotModalOpen(true);
   };
 
   const openEditSlotModal = (slot) => {
     setEditingSlot(slot);
+    const parsedTime = parse24HourTime(slot.time || '');
     setSlotFormData({
       slotNumber: slot.slotNumber.toString(),
       date: slot.date || '',
@@ -169,7 +209,17 @@ export default function ManageUsers() {
       slotPassword: slot.slotPassword || '',
       passPercentage: String(slot.passPercentage ?? 80)
     });
+    setSlotTimeInput(parsedTime);
     setIsSlotModalOpen(true);
+  };
+
+  const handleSlotTimeChange = (field, value) => {
+    const nextTimeInput = { ...slotTimeInput, [field]: value };
+    setSlotTimeInput(nextTimeInput);
+    setSlotFormData(current => ({
+      ...current,
+      time: format12HourTo24Hour(nextTimeInput)
+    }));
   };
 
   const handleCreateOrUpdateSlot = async () => {
@@ -1185,13 +1235,42 @@ export default function ManageUsers() {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Select Time *
                 </label>
-                <input 
-                  type="time" 
-                  value={slotFormData.time} 
-                  onChange={e=>setSlotFormData({...slotFormData, time:e.target.value})} 
-                  className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+                <div className="grid grid-cols-3 gap-3">
+                  <select
+                    value={slotTimeInput.hour}
+                    onChange={e => handleSlotTimeChange('hour', e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Hour</option>
+                    {SLOT_HOURS.map(hour => (
+                      <option key={hour} value={hour}>{hour}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={slotTimeInput.minute}
+                    onChange={e => handleSlotTimeChange('minute', e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Minute</option>
+                    {SLOT_MINUTES.map(minute => (
+                      <option key={minute} value={minute}>{minute}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={slotTimeInput.period}
+                    onChange={e => handleSlotTimeChange('period', e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Time is selected in 12-hour format and saved automatically for the backend.
+                </p>
               </div>
             </div>
             
