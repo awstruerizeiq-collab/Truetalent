@@ -16,7 +16,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
    
     Optional<User> findById(Integer id);
    
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.assignedExams WHERE u.id = :id")
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.assignedExams LEFT JOIN FETCH u.roles WHERE u.id = :id")
     Optional<User> findByIdWithExams(@Param("id") Integer id);
    
     @Query("SELECT DISTINCT u FROM User u JOIN u.assignedExams e WHERE e.id = :examId")
@@ -35,6 +35,14 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE User u SET u.slot = null WHERE u.slot.id = :slotId")
     int clearSlotAssignments(@Param("slotId") Integer slotId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM user_assigned_exams WHERE user_id = :userId", nativeQuery = true)
+    int deleteAssignedExamMappings(@Param("userId") Integer userId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM user_roles WHERE user_id = :userId", nativeQuery = true)
+    int deleteRoleMappings(@Param("userId") Integer userId);
     
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.assignedExams LEFT JOIN FETCH u.roles")
     List<User> findAllWithExamsAndRoles();

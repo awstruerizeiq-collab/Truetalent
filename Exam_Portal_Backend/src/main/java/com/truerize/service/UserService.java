@@ -546,7 +546,7 @@ public class UserService {
     public void deleteUser(int id) {
         log.info("🗑️ Deleting user with id: {}", id);
         
-        User user = userRepository.findById(id)
+        User user = userRepository.findByIdWithExams(id)
             .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
 
         if (user.getEmail() != null && FixedAdminCredentials.EMAIL.equalsIgnoreCase(user.getEmail())) {
@@ -569,8 +569,18 @@ public class UserService {
                 log.info("Deleted {} result record(s) for user {}", deletedResults, user.getEmail());
             }
         }
+
+        int deletedAssignedExamMappings = userRepository.deleteAssignedExamMappings(id);
+        if (deletedAssignedExamMappings > 0) {
+            log.info("Deleted {} assigned exam mapping row(s) for user {}", deletedAssignedExamMappings, user.getEmail());
+        }
+
+        int deletedRoleMappings = userRepository.deleteRoleMappings(id);
+        if (deletedRoleMappings > 0) {
+            log.info("Deleted {} role mapping row(s) for user {}", deletedRoleMappings, user.getEmail());
+        }
         
-        userRepository.delete(user);
+        userRepository.deleteById(id);
         log.info("✅ Deleted user: {}", user.getEmail());
     }
 
