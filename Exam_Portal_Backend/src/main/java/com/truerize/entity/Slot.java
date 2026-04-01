@@ -36,11 +36,11 @@ public class Slot {
     @Column(name = "pass_percentage")
     private Integer passPercentage = 80;
 
-    @OneToMany(mappedBy = "slot", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "slot", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"slot", "roles", "assignedExams", "proctoringRecords"})
     private Set<User> users = new HashSet<>();
 
-    @OneToMany(mappedBy = "slot", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "slot", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"slot", "details"})
     private List<Result> results = new ArrayList<>();
 
