@@ -1,0 +1,49 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+logs/
+tmp/
+temp/
+
+# JVM and build outputs
+**/target/
+**/build/
+**/out/
+**/*.class
+**/*.jar
+**/*.war
+**/*.ear
+hs_err_pid*
+replay_pid*
+
+# Maven
+.mvn/timing.properties
+dependency-reduced-pom.xml
+
+# Spring Boot runtime data
+Exam_Portal_Backend/uploads/
+
+# Frontend dependencies and build outputs
+Exam_Portal_Frontend/node_modules/
+Exam_Portal_Frontend/build/
+Exam_Portal_Frontend/dist/
+Exam_Portal_Frontend/coverage/
+Exam_Portal_Frontend/.cache/
+Exam_Portal_Frontend/.eslintcache
+Exam_Portal_Frontend/*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
