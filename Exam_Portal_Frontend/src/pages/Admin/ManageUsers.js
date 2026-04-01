@@ -154,9 +154,15 @@ export default function ManageUsers() {
   const fetchExams = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/admin/exams`);
-      setExams(res.data);
+      const examsData = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.exams)
+          ? res.data.exams
+          : [];
+      setExams(examsData);
     } catch (err) { 
       console.error('Fetch exams error:', err);
+      setExams([]);
       setNotification({ message: 'Failed to fetch exams', type: 'error', persistent: false });
     }
   };
@@ -1122,7 +1128,7 @@ export default function ManageUsers() {
                 className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Choose an exam --</option>
-                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
+                {(Array.isArray(exams) ? exams : []).map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
               </select>
             </div>
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
