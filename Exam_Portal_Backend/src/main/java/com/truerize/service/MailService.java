@@ -13,10 +13,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
@@ -40,9 +43,11 @@ public class MailService {
     private final long delayBetweenBatchesMs;
     private final int maxRetries;
     private final long retryDelayMs;
+    private final Executor mailTaskExecutor;
 
     public MailService(
             JavaMailSender mailSender,
+            @Qualifier("mailTaskExecutor") Executor mailTaskExecutor,
             @Value("${app.mail.from:${spring.mail.username:talent@truerize.com}}") String fromEmail,
             @Value("${app.mail.bulk.batch-size:20}") int bulkBatchSize,
             @Value("${app.mail.bulk.delay-between-emails-ms:400}") long delayBetweenEmailsMs,
@@ -50,6 +55,7 @@ public class MailService {
             @Value("${app.mail.bulk.max-retries:3}") int maxRetries,
             @Value("${app.mail.bulk.retry-delay-ms:2000}") long retryDelayMs) {
         this.mailSender = mailSender;
+        this.mailTaskExecutor = mailTaskExecutor;
         this.fromEmail = fromEmail;
         this.bulkBatchSize = Math.max(1, bulkBatchSize);
         this.delayBetweenEmailsMs = Math.max(0L, delayBetweenEmailsMs);
@@ -198,36 +204,25 @@ public class MailService {
                     batch.size()
                 );
 
+                List<CompletableFuture<EmailSendResult>> batchFutures = new ArrayList<>();
+
                 for (CandidateEmailData candidate : batch) {
                     processedCount++;
-                    if (processedCount > 1 && delayBetweenEmailsMs > 0) {
+                    if (!batchFutures.isEmpty() && delayBetweenEmailsMs > 0) {
                         pause(delayBetweenEmailsMs, dispatchId, candidate.getEmail(), "between emails");
                     }
 
-                    EmailSendResult sendResult;
-                    try {
-                        sendResult = sendExamAssignedEmailWithRetry(
-                            candidate,
-                            examLink,
-                            dispatchId,
-                            processedCount,
-                            uniqueCandidates.size()
-                        );
-                    } catch (Exception ex) {
-                        String email = candidate != null && candidate.getEmail() != null
-                            ? candidate.getEmail().trim().toLowerCase(Locale.ROOT)
-                            : "unknown";
-                        String errorMessage = resolveErrorMessage(ex);
-                        log.error(
-                            "Mail dispatch {} rejected exam-assignment email for {} before send: {}",
-                            dispatchId,
-                            email,
-                            errorMessage,
-                            ex
-                        );
-                        sendResult = EmailSendResult.failure(email, "Truerize Assessment Invitation", 0, errorMessage);
-                    }
+                    final int recipientIndex = processedCount;
+                    batchFutures.add(CompletableFuture.supplyAsync(
+                        () -> safeSendExamAssignedEmail(candidate, examLink, dispatchId, recipientIndex, uniqueCandidates.size()),
+                        mailTaskExecutor
+                    ));
+                }
 
+                CompletableFuture.allOf(batchFutures.toArray(CompletableFuture[]::new)).join();
+
+                for (CompletableFuture<EmailSendResult> future : batchFutures) {
+                    EmailSendResult sendResult = future.join();
                     if (sendResult.isSuccess()) {
                         successCount++;
                     } else {
@@ -267,6 +262,35 @@ public class MailService {
         }
 
         return result;
+    }
+
+    private EmailSendResult safeSendExamAssignedEmail(
+            CandidateEmailData candidate,
+            String examLink,
+            String dispatchId,
+            int recipientIndex,
+            int totalRecipients) {
+
+        try {
+            return sendExamAssignedEmailWithRetry(candidate, examLink, dispatchId, recipientIndex, totalRecipients);
+        } catch (Exception ex) {
+            Throwable rootCause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+            String email = candidate != null && candidate.getEmail() != null
+                ? candidate.getEmail().trim().toLowerCase(Locale.ROOT)
+                : "unknown";
+            String errorMessage = rootCause instanceof Exception
+                ? resolveErrorMessage((Exception) rootCause)
+                : rootCause.getMessage();
+
+            log.error(
+                "Mail dispatch {} rejected exam-assignment email for {} before send: {}",
+                dispatchId,
+                email,
+                errorMessage,
+                rootCause
+            );
+            return EmailSendResult.failure(email, "Truerize Assessment Invitation", 0, errorMessage);
+        }
     }
 
     private EmailSendResult sendExamAssignedEmailWithRetry(

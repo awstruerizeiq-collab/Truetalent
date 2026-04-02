@@ -611,7 +611,16 @@ export default function ManageUsers() {
 
   const formatTime = (timeString) => {
     if (!timeString) return 'N/A';
-    return timeString.substring(0, 5);
+    const [hourPart = '0', minutePart = '00'] = String(timeString).split(':');
+    const hour24 = Number.parseInt(hourPart, 10);
+
+    if (Number.isNaN(hour24)) {
+      return timeString;
+    }
+
+    const period = hour24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hour24 % 12 || 12;
+    return `${String(hour12).padStart(2, '0')}:${String(minutePart).padStart(2, '0')} ${period}`;
   };
 
   return (

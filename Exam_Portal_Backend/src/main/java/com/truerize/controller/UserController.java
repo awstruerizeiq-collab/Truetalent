@@ -253,6 +253,26 @@ public class UserController {
         }
     }
 
+    @PostMapping("/exam/{examId}/send-assignment-emails")
+    public ResponseEntity<?> sendAssignmentEmailsForExam(@PathVariable Integer examId) {
+        try {
+            Map<String, Object> result = userService.resendExamAssignmentEmails(examId);
+            if (Boolean.TRUE.equals(result.get("success"))) {
+                return ResponseEntity.ok(result);
+            }
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
+        } catch (Exception e) {
+            log.error("Error queueing assignment emails for exam {}", examId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                    "success", false,
+                    "error", "Failed to queue assignment emails",
+                    "message", e.getMessage(),
+                    "examId", examId
+                ));
+        }
+    }
+
     @PostMapping("/send-test-email")
     public ResponseEntity<?> sendTestEmail(@RequestBody Map<String, String> request) {
         try {
