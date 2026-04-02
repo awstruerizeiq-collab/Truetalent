@@ -87,8 +87,7 @@ public class MailService {
                 "Dear Candidate,\n\n" +
                 "Congratulations! We are delighted to inform you that you have successfully cleared the online assessment. " +
                 "Your performance demonstrated a strong understanding of the required concepts and skills.\n\n" +
-                "We are pleased to invite you to the next stage of our selection process - the Technical Interview, " +
-                "scheduled on 25th November 2025 at 10:00 AM IST.\n\n" +
+                "We are pleased to invite you to the next stage of our selection process - HR will contact soon.\n\n" +
                 "This interview will allow our technical panel to better understand your problem-solving approach, " +
                 "domain expertise, and overall suitability for the role.\n\n" +
                 "Kindly confirm your availability by replying to this email at your earliest convenience. " +
