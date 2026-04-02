@@ -1,13 +1,6 @@
 package com.truerize.service;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,7 +21,6 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -52,8 +44,6 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private static final Pattern EMAIL_EXTRACT_PATTERN =
         Pattern.compile("([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+)");
-    private static final DateTimeFormatter UPLOAD_TS_FORMAT =
-        DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
     @Autowired
     private UserRepository userRepository;
@@ -82,8 +72,8 @@ public class UserService {
     @Autowired
     private AdminBootstrapService adminBootstrapService;
 
-    @Value("${file.user-upload-dir:uploads/users}")
-    private String userUploadDir;
+    @Autowired
+    private StoredFileService storedFileService;
 
     @Transactional
     public Map<String, Object> assignExamToUsers(List<Integer> userIds, Integer examId) {
@@ -385,8 +375,10 @@ public class UserService {
         response.put("success", createdCount > 0);
         response.put("slotId", slot.getId());
         response.put("slotNumber", slot.getSlotNumber());
+        response.put("uploadedFileId", storedUploadFile.fileId);
         response.put("uploadedFileName", storedUploadFile.fileName);
-        response.put("uploadedFilePath", storedUploadFile.filePath);
+        response.put("uploadedFilePath", storedUploadFile.fileUrl);
+        response.put("uploadedFileUrl", storedUploadFile.fileUrl);
         response.put("processedRows", processedRows);
         response.put("createdCount", createdCount);
         response.put("failedCount", failedRows.size());
@@ -654,35 +646,16 @@ public class UserService {
     }
 
     private StoredUploadFile storeUploadFileForSlot(MultipartFile file, Slot slot) {
-        String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.xlsx";
-        String safeName = sanitizeFilename(originalName);
-        String timestamp = LocalDateTime.now().format(UPLOAD_TS_FORMAT);
-        String finalFileName = timestamp + "_" + safeName;
-        String slotFolder = "slot-" + (slot.getSlotNumber() != null ? slot.getSlotNumber() : slot.getId());
+        var storedFile = storedFileService.storeFile(
+            file,
+            "USER_EXCEL_UPLOAD",
+            null,
+            null,
+            slot.getId());
 
-        Path slotDir = Paths.get(userUploadDir, slotFolder).normalize();
-        Path targetPath = slotDir.resolve(finalFileName).normalize();
-
-        if (!targetPath.startsWith(slotDir)) {
-            throw new IllegalArgumentException("Invalid upload file path");
-        }
-
-        try {
-            Files.createDirectories(slotDir);
-            try (InputStream in = file.getInputStream()) {
-                Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            }
-            log.info("Stored user upload file for slot {} at {}", slot.getId(), targetPath);
-            return new StoredUploadFile(finalFileName, targetPath.toString());
-        } catch (IOException ex) {
-            throw new RuntimeException("Failed to store uploaded file", ex);
-        }
-    }
-
-    private String sanitizeFilename(String filename) {
-        String baseName = Paths.get(filename).getFileName().toString();
-        String cleaned = baseName.replaceAll("[^A-Za-z0-9._-]", "_");
-        return cleaned.isBlank() ? "upload.xlsx" : cleaned;
+        String fileUrl = storedFileService.buildFileUrl(storedFile.getId());
+        log.info("Stored user upload file for slot {} in database with file id {}", slot.getId(), storedFile.getId());
+        return new StoredUploadFile(storedFile.getId(), storedFile.getOriginalFileName(), fileUrl);
     }
 
     private String normalizeUploadedEmail(String rawEmail) {
@@ -712,13 +685,14 @@ public class UserService {
     }
 
     private static class StoredUploadFile {
+        private final Long fileId;
         private final String fileName;
-        private final String filePath;
+        private final String fileUrl;
 
-        private StoredUploadFile(String fileName, String filePath) {
+        private StoredUploadFile(Long fileId, String fileName, String fileUrl) {
+            this.fileId = fileId;
             this.fileName = fileName;
-            this.filePath = filePath;
+            this.fileUrl = fileUrl;
         }
     }
 }
-
