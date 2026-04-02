@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.truerize.entity.User;
+import com.truerize.service.MailService;
 import com.truerize.service.UserService;
 
 @RestController
@@ -21,6 +22,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private MailService mailService;
 
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
@@ -206,7 +210,7 @@ public class UserController {
             log.info("✅ Validated request - userIds: {}, examId: {}", userIds, examId);
             
          
-            Map<String, Object> result = userService.assignExamToUsers(userIds, examId);
+            Map<String, Object> result = userService.assignExamToUsersAndSendEmails(userIds, examId);
             
            
             if (Boolean.TRUE.equals(result.get("success"))) {
@@ -246,6 +250,32 @@ public class UserController {
             log.error("Error fetching users for exam {}", examId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to fetch users"));
+        }
+    }
+
+    @PostMapping("/send-test-email")
+    public ResponseEntity<?> sendTestEmail(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("success", false, "error", "email is required"));
+            }
+
+            mailService.sendDirectTestEmail(email);
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Test email sent successfully",
+                "email", email
+            ));
+        } catch (Exception e) {
+            log.error("Error sending test email", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                    "success", false,
+                    "error", "Failed to send test email",
+                    "message", e.getMessage()
+                ));
         }
     }
 }

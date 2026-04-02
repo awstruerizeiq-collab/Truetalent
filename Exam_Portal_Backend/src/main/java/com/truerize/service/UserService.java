@@ -1,6 +1,13 @@
 package com.truerize.service;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +28,7 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,6 +52,8 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private static final Pattern EMAIL_EXTRACT_PATTERN =
         Pattern.compile("([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+)");
+    private static final DateTimeFormatter UPLOAD_TS_FORMAT =
+        DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
     @Autowired
     private UserRepository userRepository;
@@ -72,8 +82,8 @@ public class UserService {
     @Autowired
     private AdminBootstrapService adminBootstrapService;
 
-    @Autowired
-    private StoredFileService storedFileService;
+    @Value("${file.user-upload-dir:uploads/users}")
+    private String userUploadDir;
 
     @Transactional
     public Map<String, Object> assignExamToUsers(List<Integer> userIds, Integer examId) {
@@ -206,6 +216,113 @@ public class UserService {
             response.put("failedUsers", failedUsers);
         }
         
+        return response;
+    }
+
+    @Transactional
+    public Map<String, Object> assignExamToUsersAndSendEmails(List<Integer> userIds, Integer examId) {
+        log.info("Assigning exam {} to {} users with immediate email queueing", examId, userIds.size());
+
+        Map<String, Object> response = new HashMap<>();
+        List<String> successUsers = new ArrayList<>();
+        List<String> failedUsers = new ArrayList<>();
+        List<MailService.CandidateEmailData> emailCandidates = new ArrayList<>();
+
+        try {
+            if (!examRepository.existsById(examId)) {
+                response.put("success", false);
+                response.put("error", "Exam not found");
+                response.put("message", "The selected exam (ID: " + examId + ") does not exist. Please create the exam first before assigning it.");
+                return response;
+            }
+
+            Optional<Exam> examOpt = examRepository.findById(examId);
+            if (examOpt.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Failed to load exam");
+                response.put("message", "Exam exists but could not be loaded. Please contact support.");
+                return response;
+            }
+
+            Exam exam = examOpt.get();
+            String examLink = "http://localhost:3000/login?examId=" + examId;
+
+            for (Integer userId : userIds) {
+                try {
+                    Optional<User> userOpt = userRepository.findByIdWithExams(userId);
+                    if (userOpt.isEmpty()) {
+                        failedUsers.add("User ID " + userId + " not found");
+                        continue;
+                    }
+
+                    User user = userOpt.get();
+                    if (user.getAssignedExams() == null) {
+                        user.setAssignedExams(new HashSet<>());
+                    }
+
+                    if (user.getSlot() == null) {
+                        failedUsers.add(user.getEmail() + " (no slot assigned)");
+                        continue;
+                    }
+
+                    boolean alreadyAssigned = user.getAssignedExams().stream()
+                        .anyMatch(e -> e.getId() == examId);
+
+                    User savedUser = user;
+                    if (alreadyAssigned) {
+                        successUsers.add(user.getEmail() + " (already assigned)");
+                    } else {
+                        user.getAssignedExams().add(exam);
+                        savedUser = userRepository.save(user);
+                        successUsers.add(savedUser.getEmail());
+                    }
+
+                    Slot userSlot = savedUser.getSlot();
+                    emailCandidates.add(new MailService.CandidateEmailData(
+                        savedUser.getEmail(),
+                        savedUser.getPassword(),
+                        userSlot.getDate(),
+                        userSlot.getTime(),
+                        userSlot.getSlotNumber()
+                    ));
+                } catch (Exception userEx) {
+                    log.error("Error processing user {}: {}", userId, userEx.getMessage(), userEx);
+                    failedUsers.add("User ID " + userId + ": " + userEx.getMessage());
+                }
+            }
+
+            if (!emailCandidates.isEmpty()) {
+                mailService.sendBulkExamAssignedEmails(emailCandidates, examLink);
+            }
+
+            response.put("success", !successUsers.isEmpty());
+            response.put("successCount", successUsers.size());
+            response.put("failedCount", failedUsers.size());
+            response.put("emailQueuedCount", emailCandidates.size());
+            response.put("successUsers", successUsers);
+            response.put("failedUsers", failedUsers);
+            response.put("examId", examId);
+            response.put("examTitle", exam.getTitle());
+
+            if (successUsers.isEmpty()) {
+                response.put("message", "Failed to assign exam to any users. Please check the errors.");
+            } else if (failedUsers.isEmpty()) {
+                response.put("message", "Exam assigned successfully and email queued for all " + emailCandidates.size() + " user(s).");
+            } else {
+                response.put("message", String.format(
+                    "Exam processed for %d user(s), email queued for %d, and %d failed. Check details below.",
+                    successUsers.size(), emailCandidates.size(), failedUsers.size()
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Error in assignExamToUsersAndSendEmails", e);
+            response.put("success", false);
+            response.put("error", "Failed to assign exam");
+            response.put("message", e.getMessage());
+            response.put("successUsers", successUsers);
+            response.put("failedUsers", failedUsers);
+        }
+
         return response;
     }
 
@@ -375,10 +492,8 @@ public class UserService {
         response.put("success", createdCount > 0);
         response.put("slotId", slot.getId());
         response.put("slotNumber", slot.getSlotNumber());
-        response.put("uploadedFileId", storedUploadFile.fileId);
         response.put("uploadedFileName", storedUploadFile.fileName);
-        response.put("uploadedFilePath", storedUploadFile.fileUrl);
-        response.put("uploadedFileUrl", storedUploadFile.fileUrl);
+        response.put("uploadedFilePath", storedUploadFile.filePath);
         response.put("processedRows", processedRows);
         response.put("createdCount", createdCount);
         response.put("failedCount", failedRows.size());
@@ -646,16 +761,35 @@ public class UserService {
     }
 
     private StoredUploadFile storeUploadFileForSlot(MultipartFile file, Slot slot) {
-        var storedFile = storedFileService.storeFile(
-            file,
-            "USER_EXCEL_UPLOAD",
-            null,
-            null,
-            slot.getId());
+        String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.xlsx";
+        String safeName = sanitizeFilename(originalName);
+        String timestamp = LocalDateTime.now().format(UPLOAD_TS_FORMAT);
+        String finalFileName = timestamp + "_" + safeName;
+        String slotFolder = "slot-" + (slot.getSlotNumber() != null ? slot.getSlotNumber() : slot.getId());
 
-        String fileUrl = storedFileService.buildFileUrl(storedFile.getId());
-        log.info("Stored user upload file for slot {} in database with file id {}", slot.getId(), storedFile.getId());
-        return new StoredUploadFile(storedFile.getId(), storedFile.getOriginalFileName(), fileUrl);
+        Path slotDir = Paths.get(userUploadDir, slotFolder).normalize();
+        Path targetPath = slotDir.resolve(finalFileName).normalize();
+
+        if (!targetPath.startsWith(slotDir)) {
+            throw new IllegalArgumentException("Invalid upload file path");
+        }
+
+        try {
+            Files.createDirectories(slotDir);
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+            log.info("Stored user upload file for slot {} at {}", slot.getId(), targetPath);
+            return new StoredUploadFile(finalFileName, targetPath.toString());
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to store uploaded file", ex);
+        }
+    }
+
+    private String sanitizeFilename(String filename) {
+        String baseName = Paths.get(filename).getFileName().toString();
+        String cleaned = baseName.replaceAll("[^A-Za-z0-9._-]", "_");
+        return cleaned.isBlank() ? "upload.xlsx" : cleaned;
     }
 
     private String normalizeUploadedEmail(String rawEmail) {
@@ -685,14 +819,12 @@ public class UserService {
     }
 
     private static class StoredUploadFile {
-        private final Long fileId;
         private final String fileName;
-        private final String fileUrl;
+        private final String filePath;
 
-        private StoredUploadFile(Long fileId, String fileName, String fileUrl) {
-            this.fileId = fileId;
+        private StoredUploadFile(String fileName, String filePath) {
             this.fileName = fileName;
-            this.fileUrl = fileUrl;
+            this.filePath = filePath;
         }
     }
 }

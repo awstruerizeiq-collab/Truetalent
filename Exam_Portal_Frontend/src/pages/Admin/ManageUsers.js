@@ -410,10 +410,12 @@ export default function ManageUsers() {
         slotStartTime
       };
 
-      await axios.post(`${API_BASE_URL}/admin/users/assign-exam`, payload);
+      const response = await axios.post(`${API_BASE_URL}/admin/users/assign-exam`, payload);
 
       setNotification({
-        message: "Exam assigned successfully! Students have 30-minute login window and 1 hour exam duration.",
+        message:
+          response.data?.message ||
+          "Exam assigned successfully and email queued for selected users.",
         type: "success",
         persistent: false
       });
