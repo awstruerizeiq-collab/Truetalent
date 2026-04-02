@@ -16,4 +16,9 @@ public interface ProctoringRepository extends JpaRepository<Proctoring, Long> {
     @Transactional
     @Query("DELETE FROM Proctoring p WHERE p.user.id = :userId")
     int deleteByUserId(@Param("userId") Integer userId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("DELETE FROM Proctoring p WHERE p.exam.id = :examId")
+    int deleteByExamId(@Param("examId") Integer examId);
 }

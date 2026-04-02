@@ -137,8 +137,12 @@ public class ExamController {
             ));
         } catch (RuntimeException e) {
             log.error("Error deleting exam with id: {}", id, e);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", "Exam not found with id: " + id));
+            String message = e.getMessage() != null ? e.getMessage() : "Failed to delete exam";
+            HttpStatus status = message.contains("Exam not found with id:")
+                ? HttpStatus.NOT_FOUND
+                : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(status)
+                .body(Map.of("error", message));
         } catch (Exception e) {
             log.error("Unexpected error deleting exam with id: {}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

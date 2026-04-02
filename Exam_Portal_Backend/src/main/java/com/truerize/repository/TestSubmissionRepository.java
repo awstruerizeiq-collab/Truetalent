@@ -22,5 +22,8 @@ public interface TestSubmissionRepository extends JpaRepository<TestSubmission, 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM TestSubmission ts WHERE ts.user.id = :userId")
     int deleteByUserId(@Param("userId") Integer userId);
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM TestSubmission ts WHERE ts.exam.id = :examId")
+    int deleteByExamId(@Param("examId") Integer examId);
 	TestSubmission save(TestSubmission submission);
 }
