@@ -13,8 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.truerize.entity.Exam;
 import com.truerize.entity.Question;
 import com.truerize.entity.StudentExamAssignment;
+import com.truerize.repository.ExamQuestionSetRepo;
 import com.truerize.repository.ExamRepository;
+import com.truerize.repository.ProctoringRepository;
+import com.truerize.repository.QuestionRepository;
 import com.truerize.repository.StudentExamAssignmentRepo;
+import com.truerize.repository.TestSubmissionRepository;
 
 @Service
 public class ExamService {
@@ -26,6 +30,18 @@ public class ExamService {
     
     @Autowired
     private ExamRepository examRepository;
+
+    @Autowired
+    private TestSubmissionRepository testSubmissionRepository;
+
+    @Autowired
+    private ProctoringRepository proctoringRepository;
+
+    @Autowired
+    private ExamQuestionSetRepo examQuestionSetRepo;
+
+    @Autowired
+    private QuestionRepository questionRepository;
 
   
     @Transactional
@@ -274,8 +290,22 @@ public class ExamService {
            
             int deletedAssignments = studentExamAssignmentRepo.deleteByExamId(id);
             log.info("   Deleted {} student assignments", deletedAssignments);
-            
-            
+
+            int deletedSubmissions = testSubmissionRepository.deleteByExamId(id);
+            log.info("   Deleted {} test submissions", deletedSubmissions);
+
+            int deletedProctoring = proctoringRepository.deleteByExamId(id);
+            log.info("   Deleted {} proctoring records", deletedProctoring);
+
+            Integer deletedQuestionSets = examQuestionSetRepo.deleteByExamId(id);
+            log.info("   Deleted {} exam question sets", deletedQuestionSets != null ? deletedQuestionSets : 0);
+
+            int deletedAssignedUserMappings = examRepository.deleteAssignedUserMappings(id);
+            log.info("   Deleted {} user-exam mappings", deletedAssignedUserMappings);
+
+            questionRepository.deleteByExamId(id);
+            log.info("   Deleted question rows for exam {}", id);
+
             examRepository.delete(exam);
             
             log.info("✅ Deleted exam: {}", exam.getTitle());

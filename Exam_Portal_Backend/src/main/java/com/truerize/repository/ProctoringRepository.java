@@ -12,8 +12,13 @@ import com.truerize.entity.Proctoring;
 @Repository
 public interface ProctoringRepository extends JpaRepository<Proctoring, Long> {
     
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Transactional
     @Query("DELETE FROM Proctoring p WHERE p.user.id = :userId")
-    void deleteByUserId(@Param("userId") Integer userId);
+    int deleteByUserId(@Param("userId") Integer userId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("DELETE FROM Proctoring p WHERE p.exam.id = :examId")
+    int deleteByExamId(@Param("examId") Integer examId);
 }

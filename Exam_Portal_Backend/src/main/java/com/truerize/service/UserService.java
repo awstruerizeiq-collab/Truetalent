@@ -39,8 +39,11 @@ import com.truerize.entity.Role;
 import com.truerize.entity.Slot;
 import com.truerize.entity.User;
 import com.truerize.repository.ExamRepository;
+import com.truerize.repository.ProctoringRepository;
+import com.truerize.repository.ResultRepository;
 import com.truerize.repository.RoleRepository;
 import com.truerize.repository.SlotRepository;
+import com.truerize.repository.TestSubmissionRepository;
 import com.truerize.repository.UserRepository;
 
 @Service
@@ -63,6 +66,15 @@ public class UserService {
 
     @Autowired
     private SlotRepository slotRepository;
+
+    @Autowired
+    private TestSubmissionRepository testSubmissionRepository;
+
+    @Autowired
+    private ProctoringRepository proctoringRepository;
+
+    @Autowired
+    private ResultRepository resultRepository;
 
     @Autowired
     private MailService mailService;
@@ -204,6 +216,113 @@ public class UserService {
             response.put("failedUsers", failedUsers);
         }
         
+        return response;
+    }
+
+    @Transactional
+    public Map<String, Object> assignExamToUsersAndSendEmails(List<Integer> userIds, Integer examId) {
+        log.info("Assigning exam {} to {} users with immediate email queueing", examId, userIds.size());
+
+        Map<String, Object> response = new HashMap<>();
+        List<String> successUsers = new ArrayList<>();
+        List<String> failedUsers = new ArrayList<>();
+        List<MailService.CandidateEmailData> emailCandidates = new ArrayList<>();
+
+        try {
+            if (!examRepository.existsById(examId)) {
+                response.put("success", false);
+                response.put("error", "Exam not found");
+                response.put("message", "The selected exam (ID: " + examId + ") does not exist. Please create the exam first before assigning it.");
+                return response;
+            }
+
+            Optional<Exam> examOpt = examRepository.findById(examId);
+            if (examOpt.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Failed to load exam");
+                response.put("message", "Exam exists but could not be loaded. Please contact support.");
+                return response;
+            }
+
+            Exam exam = examOpt.get();
+            String examLink = "http://localhost:3000/login?examId=" + examId;
+
+            for (Integer userId : userIds) {
+                try {
+                    Optional<User> userOpt = userRepository.findByIdWithExams(userId);
+                    if (userOpt.isEmpty()) {
+                        failedUsers.add("User ID " + userId + " not found");
+                        continue;
+                    }
+
+                    User user = userOpt.get();
+                    if (user.getAssignedExams() == null) {
+                        user.setAssignedExams(new HashSet<>());
+                    }
+
+                    if (user.getSlot() == null) {
+                        failedUsers.add(user.getEmail() + " (no slot assigned)");
+                        continue;
+                    }
+
+                    boolean alreadyAssigned = user.getAssignedExams().stream()
+                        .anyMatch(e -> e.getId() == examId);
+
+                    User savedUser = user;
+                    if (alreadyAssigned) {
+                        successUsers.add(user.getEmail() + " (already assigned)");
+                    } else {
+                        user.getAssignedExams().add(exam);
+                        savedUser = userRepository.save(user);
+                        successUsers.add(savedUser.getEmail());
+                    }
+
+                    Slot userSlot = savedUser.getSlot();
+                    emailCandidates.add(new MailService.CandidateEmailData(
+                        savedUser.getEmail(),
+                        savedUser.getPassword(),
+                        userSlot.getDate(),
+                        userSlot.getTime(),
+                        userSlot.getSlotNumber()
+                    ));
+                } catch (Exception userEx) {
+                    log.error("Error processing user {}: {}", userId, userEx.getMessage(), userEx);
+                    failedUsers.add("User ID " + userId + ": " + userEx.getMessage());
+                }
+            }
+
+            if (!emailCandidates.isEmpty()) {
+                mailService.sendBulkExamAssignedEmails(emailCandidates, examLink);
+            }
+
+            response.put("success", !successUsers.isEmpty());
+            response.put("successCount", successUsers.size());
+            response.put("failedCount", failedUsers.size());
+            response.put("emailQueuedCount", emailCandidates.size());
+            response.put("successUsers", successUsers);
+            response.put("failedUsers", failedUsers);
+            response.put("examId", examId);
+            response.put("examTitle", exam.getTitle());
+
+            if (successUsers.isEmpty()) {
+                response.put("message", "Failed to assign exam to any users. Please check the errors.");
+            } else if (failedUsers.isEmpty()) {
+                response.put("message", "Exam assigned successfully and email queued for all " + emailCandidates.size() + " user(s).");
+            } else {
+                response.put("message", String.format(
+                    "Exam processed for %d user(s), email queued for %d, and %d failed. Check details below.",
+                    successUsers.size(), emailCandidates.size(), failedUsers.size()
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Error in assignExamToUsersAndSendEmails", e);
+            response.put("success", false);
+            response.put("error", "Failed to assign exam");
+            response.put("message", e.getMessage());
+            response.put("successUsers", successUsers);
+            response.put("failedUsers", failedUsers);
+        }
+
         return response;
     }
 
@@ -534,10 +653,41 @@ public class UserService {
     public void deleteUser(int id) {
         log.info("🗑️ Deleting user with id: {}", id);
         
-        User user = userRepository.findById(id)
+        User user = userRepository.findByIdWithExams(id)
             .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+
+        if (user.getEmail() != null && FixedAdminCredentials.EMAIL.equalsIgnoreCase(user.getEmail())) {
+            throw new IllegalArgumentException("Fixed admin user cannot be deleted");
+        }
+
+        int deletedSubmissions = testSubmissionRepository.deleteByUserId(id);
+        if (deletedSubmissions > 0) {
+            log.info("Deleted {} test submission(s) for user {}", deletedSubmissions, user.getEmail());
+        }
+
+        int deletedProctoringRecords = proctoringRepository.deleteByUserId(id);
+        if (deletedProctoringRecords > 0) {
+            log.info("Deleted {} proctoring record(s) for user {}", deletedProctoringRecords, user.getEmail());
+        }
+
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            int deletedResults = resultRepository.deleteByEmailIgnoreCase(user.getEmail());
+            if (deletedResults > 0) {
+                log.info("Deleted {} result record(s) for user {}", deletedResults, user.getEmail());
+            }
+        }
+
+        int deletedAssignedExamMappings = userRepository.deleteAssignedExamMappings(id);
+        if (deletedAssignedExamMappings > 0) {
+            log.info("Deleted {} assigned exam mapping row(s) for user {}", deletedAssignedExamMappings, user.getEmail());
+        }
+
+        int deletedRoleMappings = userRepository.deleteRoleMappings(id);
+        if (deletedRoleMappings > 0) {
+            log.info("Deleted {} role mapping row(s) for user {}", deletedRoleMappings, user.getEmail());
+        }
         
-        userRepository.delete(user);
+        userRepository.deleteById(id);
         log.info("✅ Deleted user: {}", user.getEmail());
     }
 
@@ -678,4 +828,3 @@ public class UserService {
         }
     }
 }
-

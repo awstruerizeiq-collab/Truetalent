@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.truerize.entity.Slot;
+import com.truerize.repository.ResultRepository;
 import com.truerize.repository.SlotRepository;
+import com.truerize.repository.UserRepository;
 
 @Service
 public class SlotService {
@@ -21,6 +23,12 @@ public class SlotService {
 
     @Autowired
     private SlotRepository slotRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ResultRepository resultRepository;
 
     public List<Slot> getAllSlots() {
         return slotRepository.findAll();
@@ -157,6 +165,7 @@ public class SlotService {
             .orElseThrow(() -> new IllegalArgumentException("Slot not found with id: " + id));
 
         int userCount = slot.getUsers() != null ? slot.getUsers().size() : 0;
+        long resultCount = resultRepository.countBySlot_Id(id);
         log.info("Deleting slot {} (slot number: {}) with {} user(s)",
                 id, slot.getSlotNumber(), userCount);
 
@@ -164,7 +173,21 @@ public class SlotService {
             log.warn("Deleting slot with {} user(s) assigned. Users lose slot assignment.", userCount);
         }
 
-        slotRepository.delete(slot);
+        if (resultCount > 0) {
+            log.warn("Deleting slot with {} result record(s). These results will be removed.", resultCount);
+        }
+
+        int clearedAssignments = userRepository.clearSlotAssignments(id);
+        if (clearedAssignments > 0) {
+            log.info("Cleared slot assignment for {} user(s) before deleting slot {}", clearedAssignments, id);
+        }
+
+        int deletedResults = resultRepository.deleteBySlotId(id);
+        if (deletedResults > 0) {
+            log.info("Deleted {} result record(s) for slot {}", deletedResults, id);
+        }
+
+        slotRepository.deleteById(id);
         log.info("Slot deleted successfully");
     }
 
