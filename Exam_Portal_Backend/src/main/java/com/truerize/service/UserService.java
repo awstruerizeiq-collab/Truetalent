@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +32,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.truerize.config.FixedAdminCredentials;
@@ -221,7 +224,7 @@ public class UserService {
 
     @Transactional
     public Map<String, Object> assignExamToUsersAndSendEmails(List<Integer> userIds, Integer examId) {
-        log.info("Assigning exam {} to {} users with immediate email queueing", examId, userIds.size());
+        log.info("Assigning exam {} to {} users with reliable bulk email queueing", examId, userIds.size());
 
         Map<String, Object> response = new HashMap<>();
         List<String> successUsers = new ArrayList<>();
@@ -291,14 +294,13 @@ public class UserService {
                 }
             }
 
-            if (!emailCandidates.isEmpty()) {
-                mailService.sendBulkExamAssignedEmails(emailCandidates, examLink);
-            }
+            queueBulkExamAssignmentEmailsAfterCommit(emailCandidates, examLink, examId, exam.getTitle());
 
             response.put("success", !successUsers.isEmpty());
             response.put("successCount", successUsers.size());
             response.put("failedCount", failedUsers.size());
             response.put("emailQueuedCount", emailCandidates.size());
+            response.put("emailDispatchStatus", emailCandidates.isEmpty() ? "SKIPPED" : "QUEUED");
             response.put("successUsers", successUsers);
             response.put("failedUsers", failedUsers);
             response.put("examId", examId);
@@ -321,6 +323,156 @@ public class UserService {
             response.put("message", e.getMessage());
             response.put("successUsers", successUsers);
             response.put("failedUsers", failedUsers);
+        }
+
+        return response;
+    }
+
+    private void queueBulkExamAssignmentEmailsAfterCommit(
+            List<MailService.CandidateEmailData> emailCandidates,
+            String examLink,
+            Integer examId,
+            String examTitle) {
+
+        if (emailCandidates == null || emailCandidates.isEmpty()) {
+            log.info("No exam assignment emails to queue for exam {}", examId);
+            return;
+        }
+
+        Runnable dispatch = () -> {
+            log.info("Queueing bulk exam assignment emails for exam {} ({}) to {} recipient(s)",
+                examId, examTitle, emailCandidates.size());
+
+            CompletableFuture<MailService.BulkEmailResult> future =
+                mailService.sendBulkExamAssignedEmails(emailCandidates, examLink);
+
+            future.whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    log.error("Bulk exam assignment email dispatch failed for exam {}: {}",
+                        examId, throwable.getMessage(), throwable);
+                    return;
+                }
+
+                if (result == null) {
+                    log.error("Bulk exam assignment email dispatch for exam {} completed without a result", examId);
+                    return;
+                }
+
+                if (result.getFailureCount() > 0) {
+                    log.warn(
+                        "Bulk exam assignment email dispatch {} finished for exam {}: success={}, failed={}, durationMs={}",
+                        result.getDispatchId(),
+                        examId,
+                        result.getSuccessCount(),
+                        result.getFailureCount(),
+                        result.getDurationMs()
+                    );
+                    log.warn("Bulk exam assignment email failures for exam {}: {}", examId, result.getFailureReasons());
+                    return;
+                }
+
+                log.info(
+                    "Bulk exam assignment email dispatch {} finished for exam {}: success={}, failed={}, durationMs={}",
+                    result.getDispatchId(),
+                    examId,
+                    result.getSuccessCount(),
+                    result.getFailureCount(),
+                    result.getDurationMs()
+                );
+            });
+        };
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatch.run();
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        log.warn("Skipped bulk exam assignment email dispatch for exam {} because transaction did not commit", examId);
+                    }
+                }
+            });
+            log.info("Registered bulk exam assignment email dispatch after transaction commit for exam {}", examId);
+            return;
+        }
+
+        dispatch.run();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> resendExamAssignmentEmails(Integer examId) {
+        Map<String, Object> response = new HashMap<>();
+
+        try {
+            Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found with id: " + examId));
+
+            List<User> users = userRepository.findByAssignedExamsId(examId);
+            List<MailService.CandidateEmailData> emailCandidates = new ArrayList<>();
+            List<String> skippedUsers = new ArrayList<>();
+            String examLink = "http://localhost:3000/login?examId=" + examId;
+
+            for (User user : users) {
+                if (user.getSlot() == null) {
+                    skippedUsers.add(user.getEmail() + " (no slot assigned)");
+                    continue;
+                }
+
+                Slot slot = user.getSlot();
+                emailCandidates.add(new MailService.CandidateEmailData(
+                    user.getEmail(),
+                    user.getPassword(),
+                    slot.getDate(),
+                    slot.getTime(),
+                    slot.getSlotNumber()
+                ));
+            }
+
+            CompletableFuture<MailService.BulkEmailResult> dispatchFuture =
+                mailService.sendBulkExamAssignedEmails(emailCandidates, examLink);
+
+            response.put("success", true);
+            response.put("examId", examId);
+            response.put("examTitle", exam.getTitle());
+            response.put("assignedUserCount", users.size());
+            response.put("emailQueuedCount", emailCandidates.size());
+            response.put("skippedCount", skippedUsers.size());
+            response.put("skippedUsers", skippedUsers);
+            response.put("emailDispatchStatus", emailCandidates.isEmpty() ? "SKIPPED" : "QUEUED");
+            response.put("message", emailCandidates.isEmpty()
+                ? "No eligible users found for exam email dispatch."
+                : "Bulk exam emails queued successfully for assigned users.");
+
+            dispatchFuture.whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    log.error("Bulk resend failed for exam {}: {}", examId, throwable.getMessage(), throwable);
+                    return;
+                }
+
+                if (result == null) {
+                    log.error("Bulk resend for exam {} completed without a result", examId);
+                    return;
+                }
+
+                if (result.getFailureCount() > 0) {
+                    log.warn("Bulk resend {} finished for exam {} with failures: {}",
+                        result.getDispatchId(), examId, result.getFailureReasons());
+                    return;
+                }
+
+                log.info("Bulk resend {} finished for exam {} successfully: {}",
+                    result.getDispatchId(), examId, result);
+            });
+        } catch (Exception ex) {
+            log.error("Failed to queue bulk exam emails for exam {}", examId, ex);
+            response.put("success", false);
+            response.put("examId", examId);
+            response.put("error", "Failed to queue bulk exam emails");
+            response.put("message", ex.getMessage());
         }
 
         return response;

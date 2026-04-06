@@ -48,6 +48,24 @@ const formatPercent = (value) => {
   return `${value}%`;
 };
 
+const formatTimeToAmPm = (timeValue) => {
+  if (!timeValue) {
+    return "N/A";
+  }
+
+  const [hourPart = "0", minutePart = "00"] = String(timeValue).split(":");
+  const hour24 = Number.parseInt(hourPart, 10);
+  const minute = String(minutePart).padStart(2, "0");
+
+  if (Number.isNaN(hour24)) {
+    return timeValue;
+  }
+
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${String(hour12).padStart(2, "0")}:${minute} ${period}`;
+};
+
 const DetailsModal = ({ result, onClose }) => {
   if (!result) return null;
 
@@ -264,7 +282,7 @@ const SlotWiseView = ({ slotsData, onViewSlot, loading }) => {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Time:</span>
-              <span className="font-semibold">{slotData.time}</span>
+              <span className="font-semibold">{formatTimeToAmPm(slotData.time)}</span>
             </div>
           </div>
 
